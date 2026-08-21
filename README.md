@@ -117,6 +117,7 @@ The technical internals and project architecture are documented in **[ARCHITECTU
 
 * **[idlesauce](https://github.com/idlesauce)** & contributors — [umtx2](https://github.com/idlesauce/umtx2), the WebKit/kernel exploit chain used for firmware 1.00–5.50.
 * **[jordyidk](https://github.com/jordyidk)** & contributors — [slopkit](https://github.com/itsPLK/slopkit), the WebKit/kernel exploit chain used for firmware 7.00–12.00.
+* **[soniciso1](https://github.com/soniciso1)** — [pooP2JB](https://github.com/soniciso1/pooP2JB), firmware 7.00–8.60 support for slopkit.
 * **[john-tornblom](https://github.com/john-tornblom)** — [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk/) and [elfldr](https://github.com/ps5-payload-dev/elfldr)
 * **[Mark Adler](https://github.com/madler)** — [puff.c](https://github.com/madler/zlib/tree/master/contrib/puff) (used to decompress embedded frontend files)
 * Everyone else contributing to the PS5 homebrew scene.
