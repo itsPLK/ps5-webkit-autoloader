@@ -3,7 +3,7 @@
 	url = https://github.com/itsPLK/ps5-unified-autoloader.git
 [submodule "third_party/slopkit"]
 	path = third_party/slopkit
-	url = https://github.com/jordyidk/slopkit.git
+	url = https://github.com/itsPLK/slopkit.git
 [submodule "third_party/umtx2"]
 	path = third_party/umtx2
 	url = https://github.com/idlesauce/umtx2.git

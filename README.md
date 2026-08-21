@@ -3,10 +3,10 @@
 </p>
 <h1 align="center">PS5 WebKit Autoloader</h1>
 &nbsp;
-<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>1.00&ndash;5.50</b> and <b>9.00&ndash;12.00</b>.</p>
+<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>1.00&ndash;5.50</b> and <b>7.00&ndash;12.00</b>.</p>
 
 > [!NOTE]
-> Uses the [umtx2](https://github.com/idlesauce/umtx2) (FW 1.00–5.50) and [slopkit](https://github.com/jordyidk/slopkit) (FW 9.00–12.00) WebKit exploits under the hood with minimal changes (via patch files in `patches/`), so stability should match the originals.
+> Uses the [umtx2](https://github.com/idlesauce/umtx2) (FW 1.00–5.50) and [slopkit](https://github.com/itsPLK/slopkit) (FW 7.00–12.00) WebKit exploits under the hood with minimal changes (via patch files in `patches/`), so stability should match the originals.
 
 <p align="center">
     <b>Other Autoloaders:</b><br>
@@ -87,7 +87,7 @@ The latest installer payload will re-create the homescreen app and refresh the c
 <Details>
 <Summary><i>How to use a custom ELF Loader?</i></Summary>
 
-On firmwares 9.00–12.00 (slopkit), the autoloader uses a custom version of **elfldr** that only accepts connections from the PS5 itself (localhost). This improves security by preventing unauthorized devices on your network from sending payloads to your console. On firmwares 1.00–5.50 (umtx2), the stock elfldr is booted.
+On firmwares 7.00–12.00 (slopkit), the autoloader uses a custom version of **elfldr** that only accepts connections from the PS5 itself (localhost). This improves security by preventing unauthorized devices on your network from sending payloads to your console. On firmwares 1.00–5.50 (umtx2), the stock elfldr is booted.
 
 If you want to use a "normal" ELF Loader that allows sending payloads from any device, you can simply load it through **Payload Manager**.
 
@@ -116,7 +116,7 @@ The technical internals and project architecture are documented in **[ARCHITECTU
 ## Credits
 
 * **[idlesauce](https://github.com/idlesauce)** & contributors — [umtx2](https://github.com/idlesauce/umtx2), the WebKit/kernel exploit chain used for firmware 1.00–5.50.
-* **[jordyidk](https://github.com/jordyidk)** & contributors — [slopkit](https://github.com/jordyidk/slopkit), the WebKit/kernel exploit chain used for firmware 9.00–12.00.
+* **[jordyidk](https://github.com/jordyidk)** & contributors — [slopkit](https://github.com/itsPLK/slopkit), the WebKit/kernel exploit chain used for firmware 7.00–12.00.
 * **[john-tornblom](https://github.com/john-tornblom)** — [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk/) and [elfldr](https://github.com/ps5-payload-dev/elfldr)
 * **[Mark Adler](https://github.com/madler)** — [puff.c](https://github.com/madler/zlib/tree/master/contrib/puff) (used to decompress embedded frontend files)
 * Everyone else contributing to the PS5 homebrew scene.

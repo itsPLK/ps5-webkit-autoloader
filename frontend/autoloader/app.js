@@ -54,7 +54,7 @@
      string (/PlayStation 5/x.xx/). Keep in sync with the exploits' own lists:
      umtx2/document/en/ps5/main.js and slopkit/slopkit/main.js. */
   var UMTX2_FIRMWARES = ["1.00", "1.01", "1.02", "1.05", "1.10", "1.11", "1.12", "1.13", "1.14", "2.00", "2.20", "2.25", "2.26", "2.30", "2.50", "2.70", "3.00", "3.10", "3.20", "3.21", "4.00", "4.02", "4.03", "4.50", "4.51", "5.00", "5.02", "5.10", "5.50"];
-  var SLOPKIT_FIRMWARES = ["9.00", "9.05", "9.20", "9.40", "9.60", "10.00", "10.01", "10.20", "10.40", "10.60", "11.00", "11.20", "11.40", "11.60", "12.00"];
+  var SLOPKIT_FIRMWARES = ["7.00", "7.01", "7.20", "7.40", "7.60", "7.61", "8.00", "8.20", "8.40", "8.60", "9.00", "9.05", "9.20", "9.40", "9.60", "10.00", "10.01", "10.20", "10.40", "10.60", "11.00", "11.20", "11.40", "11.60", "12.00"];
 
   var UMTX2_URL =
     'umtx2/index.html?autoload=payload.elf&v=1';
@@ -124,7 +124,7 @@
     if (UMTX2_FIRMWARES.indexOf(fw.str) !== -1) return 'umtx2';
     if (SLOPKIT_FIRMWARES.indexOf(fw.str) !== -1) return 'slopkit';
     uiLog('[ERROR] Unsupported firmware ' + fw.str +
-      ' (supported: 1.00-5.50 via umtx2, 9.00-12.00 via slopkit).', 'error');
+      ' (supported: 1.00-5.50 via umtx2, 7.00-12.00 via slopkit).', 'error');
     return null;
   }
 

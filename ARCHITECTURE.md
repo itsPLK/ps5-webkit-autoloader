@@ -5,7 +5,7 @@ and autoloads your payloads fully offline. Two exploit chains are bundled and
 selected by firmware:
 
 - **umtx2** (FW **1.00–5.50**) — idlesauce's umtx2 exploit.
-- **slopkit** (FW **9.00–12.00**) — the slopkit exploit chain.
+- **slopkit** (FW **7.00–12.00**) — the slopkit exploit chain.
 
 Both converge on the same result: a `WKAL00001` homescreen app that runs the
 exploit, boots elfldr, and autoloads your payload through it.
@@ -42,7 +42,7 @@ instead of the unified-autoloader — so this flow installs the homescreen app.
 - A splash screen, a log terminal and a progress bar. The exploit runs in a **hidden**
   same-origin iframe. On load, `app.js` picks the chain from the firmware in the
   user-agent (`PlayStation 5/x.xx`): **umtx2** (`umtx2/index.html?autoload=payload.elf`)
-  for 1.00–5.50, **slopkit** (`slopkit/slopkit/poops.html?go=1&auto=1&...`) for 9.00–12.00.
+  for 1.00–5.50, **slopkit** (`slopkit/slopkit/poops.html?go=1&auto=1&...`) for 7.00–12.00.
   Firmware outside both ranges shows a clean error and never arms the iframe.
 - A `FORCE_EXPLOIT` build-time override (or a `?force=` query) bypasses the table so a
   specific chain can be exercised on any firmware for testing; the exploit's own
@@ -59,7 +59,7 @@ instead of the unified-autoloader — so this flow installs the homescreen app.
 `payload.elf` is a virtual name: the PC host serves the installer ELF there, the homescreen app
 serves the real unified-autoloader. Both exploits autoload the same `payload.elf`. umtx2 (FW
 1.00–5.50) boots its **own bundled elfldr** (`/app/<version>/umtx2/payloads/elfldr-ps5.elf`, kept
-from the umtx2 submodule like stock umtx2); slopkit (9.00–12.00) boots the **shared elfldr**
+from the umtx2 submodule like stock umtx2); slopkit (7.00–12.00) boots the **shared elfldr**
 (`/app/<version>/shared/elfldr-ps5.elf`).
 
 ## Native installer (`src/`)
