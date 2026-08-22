@@ -1,16 +1,16 @@
-diff --git a/slopkit/poops.html b/slopkit/poops.html
-index df80712..55734ad 100644
---- a/slopkit/poops.html
-+++ b/slopkit/poops.html
-@@ -535,6 +535,7 @@ const DEFAULT_ATTEMPTS = TRIGGER === "overflow" ? 96
- const cfg = {
+diff --git a/slopkit/p2jb.html b/slopkit/p2jb.html
+index 586a146eff37bb4c8796c26bb0ca4d7700504d2b..8ccfcbd35235dd37f496c9eb0888af004f208d24 100644
+--- a/slopkit/p2jb.html
++++ b/slopkit/p2jb.html
+@@ -450,6 +450,7 @@ const ARMED = Q.get("go") === "1";
+ const CLEARLATCH = Q.get("clear") === "1";
+ const MAX_ATTEMPTS = parseInt(Q.get("max") || "0", 10) || 0;
+ const REUSE_ELFLDR = Q.get("reuse") === "1";
++const AUTOLOAD = Q.get("autoload") || "";
  
-     payload: Q.get("payload") || "",
-+    autoload: Q.get("autoload") || "",
-     trigger: TRIGGER,
-     burn: BURN,
-     netprobe: Q.get("netprobe") === "1",
-@@ -595,6 +596,7 @@ function exactQuery(expected) {
+ const PROGRESS_KEY = "slopkit-poops:next";
+ const RUNLOG_KEY = "slopkit-poops:last";
+@@ -508,6 +509,7 @@ function exactQuery(expected) {
      const keys = Object.keys(expected);
      let count = 0, exact = true;
      Q.forEach((value, key) => {
@@ -18,7 +18,7 @@ index df80712..55734ad 100644
          count++;
          if (!Object.prototype.hasOwnProperty.call(expected, key)
              || expected[key] !== value) exact = false;
-@@ -986,7 +988,9 @@ const PAYLOADS = Object.freeze([
+@@ -826,7 +828,9 @@ const PAYLOADS = Object.freeze([
      { title: "PLK Manager", description: "Payload management tools.",
          name: "PLK.elf", info: "PLK.elf - PLK" },
      { title: "ShadowMountPlus", description: "Mount and manage game images.",
@@ -29,7 +29,7 @@ index df80712..55734ad 100644
  ]);
  
  function populatePayloadButtons() {
-@@ -1019,6 +1023,7 @@ function populatePayloadButtons() {
+@@ -859,6 +863,7 @@ function populatePayloadButtons() {
          button.appendChild(title);
          button.appendChild(description);
          button.appendChild(info);
@@ -37,7 +37,7 @@ index df80712..55734ad 100644
          button.addEventListener("click", function (event) {
              if (event && event.preventDefault) event.preventDefault();
              sendPayloadInPlace(payload.name, button);
-@@ -1238,7 +1243,7 @@ function preparePayloadSender() {
+@@ -1078,7 +1083,7 @@ function preparePayloadSender() {
      }
  }
  
@@ -46,7 +46,7 @@ index df80712..55734ad 100644
      if (!elfldrSpawned)
          throw new Error("ELF loader is not ready");
      if (!P || !chain)
-@@ -1250,7 +1255,7 @@ async function sendPayloadToElfldr(name) {
+@@ -1090,7 +1095,7 @@ async function sendPayloadToElfldr(name) {
      if (!payloadIsListed(name))
          throw new Error("payload is not listed in this menu");
  
@@ -55,7 +55,109 @@ index df80712..55734ad 100644
          { cache: "no-store" });
      if (!response.ok)
          throw new Error("payload fetch failed: HTTP " + response.status);
-@@ -2189,6 +2194,20 @@ async function runLadder() {
+@@ -1925,6 +1930,35 @@ function showWin() {
+     showVerdict(false, "ELF LOADER READY");
+     stage("ELF LOADER READY", "ok");
+     showPayloadMenu();
++    if (AUTOLOAD) {
++        // WKAL: elfldr needs a moment to bind 9021 after the kexp thread
++        // returns, then send the autoload payload from the shared payloads
++        // dir and report the result to the parent page (WebKit Autoloader).
++        stage("autoloading " + AUTOLOAD + " in 4 s", "ok");
++        setTimeout(function () {
++            sendPayloadToElfldr(AUTOLOAD, "../../payloads/")
++                .then(function (r) {
++                    flushMark("AUTOLOAD-OK",
++                        "name=" + clean(AUTOLOAD) + "-bytes=" + r.bytes);
++                    stage("autoloaded " + AUTOLOAD + " (" + r.bytes + " bytes)", "ok");
++                    try {
++                        window.parent.postMessage({ type: "wkal",
++                            kind: "autoload", ok: true, bytes: r.bytes }, "*");
++                    } catch (e) { }
++                })
++                .catch(function (err) {
++                    flushMark("AUTOLOAD-FAILED", "why="
++                        + clean(err && err.message ? err.message : err));
++                    stage("autoload failed: "
++                        + (err && err.message ? err.message : err), "bad");
++                    try {
++                        window.parent.postMessage({ type: "wkal",
++                            kind: "autoload", ok: false,
++                            why: String(err && err.message || err) }, "*");
++                    } catch (e) { }
++                });
++        }, 4000);
++    }
+ }
+ window.showWin = showWin;
+ 
+@@ -1965,7 +1999,7 @@ async function main() {
+         // tree the ELFs live one level up (same place poops.html's sender
+         // fetches). Must be set AFTER the adapter eval, which assigns its own
+         // defaults, and BEFORE p2jb.js starts (it reads them at call time).
+-        window.P2JB_ELF_URL = "../payloads/elfldr-ps5-1360.elf";
++        window.P2JB_ELF_URL = "../../shared/elfldr-ps5.elf";
+         window.P2JB_KEXP_URL = "../payloads/kexp_2026_05_25.bin";
+         // From here the adapter owns the hijacked worker: route this page's
+         // syscalls through it (per-NR stubs via window.call).
+diff --git a/slopkit/poops.html b/slopkit/poops.html
+index 6d4c65bc99e10143a653b00fe8a72f3eb03bd76c..ba1de03efdb46d5045394b9a497642e458bd7ced 100644
+--- a/slopkit/poops.html
++++ b/slopkit/poops.html
+@@ -537,6 +537,7 @@ const DEFAULT_ATTEMPTS = TRIGGER === "overflow" ? 96
+ const cfg = {
+ 
+     payload: Q.get("payload") || "",
++    autoload: Q.get("autoload") || "",
+     trigger: TRIGGER,
+     burn: BURN,
+     netprobe: Q.get("netprobe") === "1",
+@@ -597,6 +598,7 @@ function exactQuery(expected) {
+     const keys = Object.keys(expected);
+     let count = 0, exact = true;
+     Q.forEach((value, key) => {
++        if (key === "autoload") return;
+         count++;
+         if (!Object.prototype.hasOwnProperty.call(expected, key)
+             || expected[key] !== value) exact = false;
+@@ -988,7 +990,9 @@ const PAYLOADS = Object.freeze([
+     { title: "PLK Manager", description: "Payload management tools.",
+         name: "PLK.elf", info: "PLK.elf - PLK" },
+     { title: "ShadowMountPlus", description: "Mount and manage game images.",
+-        name: "shadowmountplus.elf", info: "shadowmountplus.elf - Drakmor" }
++        name: "shadowmountplus.elf", info: "shadowmountplus.elf - Drakmor" },
++    { title: "WKAL autoload", description: "", name: "payload.elf",
++        info: "payload.elf", hidden: true }
+ ]);
+ 
+ function populatePayloadButtons() {
+@@ -1021,6 +1025,7 @@ function populatePayloadButtons() {
+         button.appendChild(title);
+         button.appendChild(description);
+         button.appendChild(info);
++        if (payload.hidden) button.style.display = "none";
+         button.addEventListener("click", function (event) {
+             if (event && event.preventDefault) event.preventDefault();
+             sendPayloadInPlace(payload.name, button);
+@@ -1240,7 +1245,7 @@ function preparePayloadSender() {
+     }
+ }
+ 
+-async function sendPayloadToElfldr(name) {
++async function sendPayloadToElfldr(name, base) {
+     if (!elfldrSpawned)
+         throw new Error("ELF loader is not ready");
+     if (!P || !chain)
+@@ -1252,7 +1257,7 @@ async function sendPayloadToElfldr(name) {
+     if (!payloadIsListed(name))
+         throw new Error("payload is not listed in this menu");
+ 
+-    const response = await fetch("../payloads/" + encodeURIComponent(name),
++    const response = await fetch((base || "../payloads/") + encodeURIComponent(name),
+         { cache: "no-store" });
+     if (!response.ok)
+         throw new Error("payload fetch failed: HTTP " + response.status);
+@@ -2191,6 +2196,20 @@ async function runLadder() {
          flushMark("ELFLDR-MENU-INPAGE",
              "no-navigation-parked-racers-and-fds-remain-owned-port=9021");
          if (!payloadMenuEl.classList.contains("on")) showPayloadMenu();
@@ -77,7 +179,7 @@ index df80712..55734ad 100644
  }
  
 diff --git a/slopkit/poops.js b/slopkit/poops.js
-index ae366f1..e8cf018 100644
+index ae366f1733a9d95e38c5fe2521bf7745d43f29af..e8cf018348dbe20582ae525fe34f488a99426fff 100644
 --- a/slopkit/poops.js
 +++ b/slopkit/poops.js
 @@ -7819,9 +7819,9 @@ export function makePoopsEngine(X) {

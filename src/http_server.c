@@ -215,13 +215,17 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
             if (strcmp(url, ROUTE_CACHE_MANIFEST) == 0 && (fw > 0.0f || strcmp(WKALI_FORCE_EXPLOIT, "auto") != 0)) {
                 if (strcmp(WKALI_FORCE_EXPLOIT, "umtx2") == 0) {
                     wkali_log("[WKALI] FORCE_EXPLOIT is set, caching umtx2 exploit\n");
-                } else if (strcmp(WKALI_FORCE_EXPLOIT, "slopkit") == 0) {
-                    wkali_log("[WKALI] FORCE_EXPLOIT is set, caching slopkit exploit\n");
+                } else if (strcmp(WKALI_FORCE_EXPLOIT, "poops") == 0) {
+                    wkali_log("[WKALI] FORCE_EXPLOIT is set, caching poops exploit\n");
+                } else if (strcmp(WKALI_FORCE_EXPLOIT, "p2jb") == 0) {
+                    wkali_log("[WKALI] FORCE_EXPLOIT is set, caching p2jb exploit\n");
                 } else {
                     if (fw <= 5.50f) {
                         wkali_log("[WKALI] Detected firmware %.2f <= 5.50, caching umtx2 exploit\n", fw);
+                    } else if (fw <= 12.00f) {
+                        wkali_log("[WKALI] Detected firmware %.2f <= 12.00, caching poops exploit\n", fw);
                     } else {
-                        wkali_log("[WKALI] Detected firmware %.2f > 5.50, caching slopkit exploit\n", fw);
+                        wkali_log("[WKALI] Detected firmware %.2f > 12.00, caching p2jb exploit\n", fw);
                     }
                 }
 
@@ -243,7 +247,8 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
                         int keep = 1;
                         if (strcmp(WKALI_FORCE_EXPLOIT, "umtx2") == 0) {
                             if (strstr(line, "/slopkit/")) keep = 0;
-                        } else if (strcmp(WKALI_FORCE_EXPLOIT, "slopkit") == 0) {
+                        } else if (strcmp(WKALI_FORCE_EXPLOIT, "poops") == 0
+                            || strcmp(WKALI_FORCE_EXPLOIT, "p2jb") == 0) {
                             if (strstr(line, "/umtx2/")) keep = 0;
                         } else {
                             if (fw <= 5.50f && strstr(line, "/slopkit/")) keep = 0;

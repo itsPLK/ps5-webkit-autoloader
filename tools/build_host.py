@@ -115,8 +115,8 @@ def build_zip(frontend_dir, overrides_dir, version, build_time, payload_path=Non
                 data = data.replace(BUILD_TIME_TOKEN, build_time.encode("utf-8"))
                 zf.writestr(rel, data)
             elif rel == "app.js":
-                # Build-time exploit override (auto | umtx2 | slopkit), from the
-                # FORCE_EXPLOIT env — same token as the ELF build.
+                # Build-time exploit override (auto | umtx2 | poops | p2jb),
+                # from the FORCE_EXPLOIT env — same token as the ELF build.
                 with open(file_map[rel], "rb") as f:
                     data = f.read()
                 mode = os.environ.get("FORCE_EXPLOIT", "auto")

@@ -65,13 +65,16 @@ else
     exit 1
 fi
 
-# 4. Sanity check: the patched page must carry our integration markers.
+# 4. Sanity check: the patched pages must carry our integration markers.
 #    Catches a silently truncated/empty patch. These markers only exist when
 #    the patch applied (they are not in pristine slopkit).
 if ! grep -q 'sendPayloadToElfldr(cfg.autoload, "../../payloads/"' slopkit/poops.html \
     || ! grep -q 'if (key === "autoload") return;' slopkit/poops.html \
     || ! grep -q 'name: "payload.elf"' slopkit/poops.html \
-    || ! grep -q '"url=../../shared/" + name' slopkit/poops.js; then
+    || ! grep -q '"url=../../shared/" + name' slopkit/poops.js \
+    || ! grep -q 'const AUTOLOAD = Q.get("autoload")' slopkit/p2jb.html \
+    || ! grep -q 'sendPayloadToElfldr(AUTOLOAD, "../../payloads/")' slopkit/p2jb.html \
+    || ! grep -q '"../../shared/elfldr-ps5.elf"' slopkit/p2jb.html; then
     echo "Error: slopkit patch verification FAILED — integration markers missing."
     echo "patches/slopkit-autoload.patch is incomplete or out of date."
     echo "Regenerate it from the pristine submodule:"
@@ -79,4 +82,4 @@ if ! grep -q 'sendPayloadToElfldr(cfg.autoload, "../../payloads/"' slopkit/poops
     exit 1
 fi
 echo "slopkit: patch verification OK (autoload block, exactQuery relaxation,"
-echo "         hidden payload.elf tile, shared elfldr). "
+echo "         hidden payload.elf tile, shared elfldr on poops + p2jb)."

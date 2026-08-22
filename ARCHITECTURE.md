@@ -1,13 +1,14 @@
 # PS5 WebKit Autoloader: Architecture
 
 A persistent entry point for PS5 payloads that runs a WebKit/kernel exploit chain
-and autoloads your payloads fully offline. Two exploit chains are bundled and
+and autoloads your payloads fully offline. Three exploit chains are bundled and
 selected by firmware:
 
-- **umtx2** (FW **1.00–5.50**) — idlesauce's umtx2 exploit.
-- **slopkit** (FW **7.00–12.00**) — the slopkit exploit chain.
+- **umtx2** (FW 1.00–5.50) — idlesauce umtx2 chain (`umtx2/`).
+- **poops** (FW 7.00–12.00) — slopkit poops chain (`slopkit/poops.html`).
+- **p2jb** (FW 12.02–12.70) — slopkit P2JB chain (`slopkit/p2jb.html`). Takes ~1 hour.
 
-Both converge on the same result: a `WKAL00001` homescreen app that runs the
+All three converge on the same result: a `WKAL00001` homescreen app that runs the
 exploit, boots elfldr, and autoloads your payload through it.
 
 ## Repository layout
@@ -41,25 +42,28 @@ instead of the unified-autoloader — so this flow installs the homescreen app.
 
 - A splash screen, a log terminal and a progress bar. The exploit runs in a **hidden**
   same-origin iframe. On load, `app.js` picks the chain from the firmware in the
-  user-agent (`PlayStation 5/x.xx`): **umtx2** (`umtx2/index.html?autoload=payload.elf`)
-  for 1.00–5.50, **slopkit** (`slopkit/slopkit/poops.html?go=1&auto=1&...`) for 7.00–12.00.
-  Firmware outside both ranges shows a clean error and never arms the iframe.
-- A `FORCE_EXPLOIT` build-time override (or a `?force=` query) bypasses the table so a
-  specific chain can be exercised on any firmware for testing; the exploit's own
-  firmware guard still applies.
+  user-agent (`PlayStation 5/x.xx`): **umtx2** for 1.00–5.50, **poops** for 7.00–12.00,
+  and **p2jb** for 12.02–12.70.
+- A `FORCE_EXPLOIT` build-time override (`auto | umtx2 | poops | p2jb`; or a `?force=`
+  query) bypasses the table so a specific chain can be exercised on any firmware; the
+  exploit's own firmware guard still applies.
 - umtx2 auto-runs its chain via the `on_load_autorun` sessionStorage key (set by
-  `app.js` before arming); slopkit runs via its `?go=1&auto=1` query.
+  `app.js` before arming); poops and p2jb run via their `?go=1&auto=1` query.
 - On `window.load` the iframe is armed; at script parse it is blanked to `about:blank` so a
   WebProcess-crash page restore never auto-runs the chain. Before arming, `clearSlopkitState()`
-  removes slopkit's one-shot latch and "stopped at …" markers from sessionStorage so every
-  launch restarts the full ladder.
-- `app.js` mirrors the chain's screen/stage/early/summary into the log (errors, stage changes
-  and summary verdicts) and receives the `?autoload` result via `postMessage`.
+  removes the slopkit one-shot latch and "stopped at …" markers from sessionStorage (shared
+  `slopkit-poops:*` keys used by both chains) so every launch restarts the full chain.
+- `app.js` mirrors each chain's screen/stage/early/summary into the log (errors, stage changes
+  and summary verdicts) and receives the `?autoload` result via `postMessage`. For p2jb it
+  additionally parses the exploit's pinned `#livestat` readout (upstream repaints it every
+  second with a per-phase bar and an OVERALL percentage + ETA) into our own progress bar and
+  label — live feedback across the ~1 h run without flooding the log; only phase transitions
+  and milestone marks are logged.
 
 `payload.elf` is a virtual name: the PC host serves the installer ELF there, the homescreen app
-serves the real unified-autoloader. Both exploits autoload the same `payload.elf`. umtx2 (FW
+serves the real unified-autoloader. All exploits autoload the same `payload.elf`. umtx2 (FW
 1.00–5.50) boots its **own bundled elfldr** (`/app/<version>/umtx2/payloads/elfldr-ps5.elf`, kept
-from the umtx2 submodule like stock umtx2); slopkit (7.00–12.00) boots the **shared elfldr**
+from the umtx2 submodule like stock umtx2); poops and p2jb (7.00–12.70) boot the **shared elfldr**
 (`/app/<version>/shared/elfldr-ps5.elf`).
 
 ## Native installer (`src/`)
@@ -121,7 +125,8 @@ dev server.
   staging handoff (`dist/VERSION`), writes the `__complete__` marker, substitutes the tokens
   in the pointer page and the app's versioned `index.html`, lists the pointer and marker LAST
   in the manifest, and replaces the `[[EXPLOIT_MODE]]` token in `app.js` from the
-  `FORCE_EXPLOIT` env (default `auto`). Unused exploit payloads and assets are filtered out.
+  `FORCE_EXPLOIT` env (`auto | umtx2 | poops | p2jb`, default `auto`). Unused exploit payloads
+  and assets are filtered out.
 - `build_release.sh` builds the ELF in a Dockerized SDK and the host script; CI
   (`.github/workflows/release.yml`) produces the versioned artifacts and the Windows `.exe`.
   `FORCE_EXPLOIT` is forwarded into the Docker build explicitly.
@@ -132,17 +137,22 @@ dev server.
 `frontend/autoloader/slopkit/` and applies `patches/slopkit-autoload.patch` there
 (`tools/apply_slopkit_patch.sh`, run automatically by the Makefile).
 
-The patch (in `slopkit/slopkit/poops.html` and `slopkit/slopkit/poops.js`):
+The patch (in `slopkit/slopkit/poops.html`, `poops.js` and `p2jb.html`):
 
 - `?autoload=<name>`: after the chain finishes and elfldr is up, sends the named payload from
-  `../../payloads/`. Upstream's `exactQuery()` (which refuses non-canonical URLs) is relaxed to
-  tolerate the extra `autoload` query key, and the iframe URL is the canonical production query
-  (`go=1&auto=1&production=1&trigger=netcontrol&attempts=8&only=<full ladder>&log=debug&payload=1`)
-  plus `autoload=payload.elf&v=final`.
-- A hidden `payload.elf` entry in slopkit's `PAYLOADS` list so `payloadIsListed()` accepts it.
-- Posts `{type:"wkal", kind:"autoload", ok, bytes}` to the parent page.
-- Loads the **shared elfldr** from `../../shared/elfldr-ps5.elf` instead of its bundled copy
-  (the kexp shellcode stays slopkit's own — it is firmware-specific).
+  `../../payloads/`. Upstream's `exactQuery()` (which refuses non-canonical URLs) is relaxed in
+  both pages to tolerate the extra `autoload` query key. The iframe URLs are the canonical
+  production queries — poops (`go=1&auto=1&production=1&trigger=netcontrol&attempts=8&only=<full
+  ladder>&log=debug&payload=1`) plus `autoload=payload.elf&v=final`, p2jb
+  (`go=1&auto=1&production=1&log=debug&payload=1`) plus the same autoload suffix.
+- A hidden `payload.elf` entry in each page's `PAYLOADS` list so `payloadIsListed()` accepts it.
+- Posts `{type:"wkal", kind:"autoload", ok, bytes}` (or `{ok:false, why}`) to the parent page —
+  poops from the end of its ladder, p2jb from its `showWin()` win handler after a 4 s wait for
+  elfldr to bind port 9021.
+- Loads the **shared elfldr** instead of the bundled copies: poops fetches
+  `../../shared/elfldr-ps5.elf` in `poops.js` (the kexp shellcode stays slopkit's own — it is
+  firmware-specific), and p2jb's `P2JB_ELF_URL` points at the same file (the kexp maps that blob
+  into the kernel itself).
 
 To update slopkit: `git -C third_party/slopkit fetch && git -C third_party/slopkit checkout <commit>`,
 re-run the script, and regenerate the patch if it no longer applies
@@ -180,8 +190,8 @@ re-run the script, and regenerate `patches/umtx2-autoload.patch` if it no longer
 
 ## Shared elfldr
 
-slopkit boots the **shared** elfldr, served at `/app/<version>/shared/elfldr-ps5.elf` (staged
-from `frontend/autoloader/shared/`). `tools/download_deps.sh` fetches it from the pinned
+Both slopkit chains boot the **shared** elfldr, served at `/app/<version>/shared/elfldr-ps5.elf`
+(staged from `frontend/autoloader/shared/`). `tools/download_deps.sh` fetches it from the pinned
 `itsPLK/ps5-elfldr` release (tag `ELFLDR_TAG`), sha256-verifies it, and caches the digest in a
 `.sha256` sidecar so offline rebuilds work. umtx2 (FW 1.00–5.50) boots its **own** elfldr from
 the umtx2 submodule instead, matching stock umtx2 behavior. Future shared chain binaries

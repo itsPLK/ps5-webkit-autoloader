@@ -52,10 +52,11 @@ def detect_content_type(path):
 
 
 # slopkit ships its own payload menu servers (ftpsrv, gdbsrv, kstuff, ...) that
-# our autoloader never uses — the chain only needs the elfldr it boots and the
-# kexp shellcode that loads it. slopkit boots the shared elfldr (served from
-# /app/<version>/shared/elfldr-ps5.elf, see tools/download_deps.sh), so only
-# the kexp is kept. umtx2 boots its OWN bundled elfldr (kept by
+# our autoloader never uses — the chains only need the elfldr they boot and
+# the kexp shellcode that loads it. poops boots the shared elfldr (served from
+# /app/<version>/shared/elfldr-ps5.elf, see tools/download_deps.sh) and p2jb
+# is patched onto it too, so only the kexp is kept (both chains use it).
+# umtx2 boots its OWN bundled elfldr (kept by
 # tools/apply_umtx2_patch.sh at umtx2/payloads/elfldr-ps5.elf, like stock
 # umtx2); the rest of its payloads are pruned, and the autoload payload comes
 # from /app/<version>/payloads/. readme.png is a slopkit repo asset, also
@@ -83,9 +84,10 @@ BUILD_TIME_PLACEHOLDER = b"[[BUILD_TIME_PLACEHOLDER]]"
 EXPLOIT_MODE_PLACEHOLDER = b"[[EXPLOIT_MODE]]"
 APP_DIR_PLACEHOLDER = b"[[APP_DIR_PLACEHOLDER]]"
 
-# The build-time exploit override in app.js (auto | umtx2 | slopkit). Defaults
-# to "auto" (firmware routing) unless FORCE_EXPLOIT is set.
+# The build-time exploit override in app.js (auto | umtx2 | poops | p2jb).
+# Defaults to "auto" (firmware routing) unless FORCE_EXPLOIT is set.
 DEFAULT_EXPLOIT_MODE = "auto"
+EXPLOIT_MODES = ("auto", "umtx2", "poops", "p2jb")
 
 
 def get_version_info_with_handoff(dist_dir):
@@ -130,7 +132,7 @@ def apply_exploit_mode_placeholder(path, data, app_dir):
     """Replace the [[EXPLOIT_MODE]] token in app.js from the FORCE_EXPLOIT env."""
     if path == app_dir + "/app.js":
         mode = os.environ.get("FORCE_EXPLOIT", DEFAULT_EXPLOIT_MODE)
-        if mode not in ("auto", "umtx2", "slopkit"):
+        if mode not in EXPLOIT_MODES:
             print(f"Warning: unknown FORCE_EXPLOIT '{mode}' - using 'auto'.", file=sys.stderr)
             mode = "auto"
         data = data.replace(EXPLOIT_MODE_PLACEHOLDER, mode.encode("utf-8"))
@@ -163,17 +165,28 @@ def compress_entry(data):
 # matches URLs exactly (query included), so the manifest must list the full URL
 # or the console serves a fallback document instead of the exploit page. The
 # app now lives under /app/<version>/, so the URL is prefixed with that. Keep
-# in sync with SLOPKIT_URL in frontend/autoloader/app.js (which resolves to the
+# in sync with POOPS_URL in frontend/autoloader/app.js (which resolves to the
 # same absolute path from the versioned app dir). The trailing v= matches
 # slopkit's ROUTE_VERSION cache-bust (see the patch regeneration notes in
 # ARCHITECTURE.md).
-def slopkit_iframe_url(app_dir):
+def poops_iframe_url(app_dir):
     return (
         app_dir + "/slopkit/slopkit/poops.html"
         "?go=1&auto=1&production=1&trigger=netcontrol&attempts=8"
         "&only=ps0_preflight,ps1_prepare,ps3_stage0,ps4_validate"
         ",ps5_stage1,ps6_stage2,ps8_stage3,ps9_stage4,ps10_stage5"
         "&log=debug&payload=1&autoload=payload.elf&v=final"
+    )
+
+
+# Same for p2jb (FW 12.02-12.70): upstream's canonical production query plus
+# our autoload key (relaxed in patches/slopkit-autoload.patch). Keep in sync
+# with P2JB_URL in frontend/autoloader/app.js.
+def p2jb_iframe_url(app_dir):
+    return (
+        app_dir + "/slopkit/slopkit/p2jb.html"
+        "?go=1&auto=1&production=1&log=debug"
+        "&payload=1&autoload=payload.elf&v=final"
     )
 
 
@@ -233,7 +246,8 @@ def build_manifest(files, version, build_time, app_dir, pointer_path, marker_pat
     cache_entries = [path for path, _ in files if path not in (pointer_path, marker_path)]
     cache_entries.sort()
     lines += cache_entries
-    lines.append(slopkit_iframe_url(app_dir))
+    lines.append(poops_iframe_url(app_dir))
+    lines.append(p2jb_iframe_url(app_dir))
     lines.append(umtx2_iframe_url(app_dir))
     lines += collect_cachebust_urls(files)
     lines.append(pointer_path)
@@ -323,7 +337,7 @@ def main():
         out.write("#define FILE_REGISTRY_H\n")
         out.write("\n")
         mode = os.environ.get("FORCE_EXPLOIT", DEFAULT_EXPLOIT_MODE)
-        if mode not in ("auto", "umtx2", "slopkit"):
+        if mode not in EXPLOIT_MODES:
             mode = "auto"
         out.write(f'#define WKALI_FORCE_EXPLOIT "{mode}"\n')
         out.write("\n")
