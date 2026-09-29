@@ -215,17 +215,30 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
             if (strcmp(url, ROUTE_CACHE_MANIFEST) == 0 && (fw > 0.0f || strcmp(WKALI_FORCE_EXPLOIT, "auto") != 0)) {
                 if (strcmp(WKALI_FORCE_EXPLOIT, "umtx2") == 0) {
                     wkali_log("[WKALI] FORCE_EXPLOIT is set, caching umtx2 exploit\n");
+                } else if (strcmp(WKALI_FORCE_EXPLOIT, "relapse") == 0) {
+                    wkali_log("[WKALI] FORCE_EXPLOIT is set, caching relapse exploit\n");
                 } else if (strcmp(WKALI_FORCE_EXPLOIT, "poops") == 0) {
                     wkali_log("[WKALI] FORCE_EXPLOIT is set, caching poops exploit\n");
                 } else if (strcmp(WKALI_FORCE_EXPLOIT, "p2jb") == 0) {
                     wkali_log("[WKALI] FORCE_EXPLOIT is set, caching p2jb exploit\n");
                 } else {
+                    /* Auto mode: pick the default chain for this firmware.
+                       umtx2 for <= 5.50; relapse is the default for 7.00-13.60
+                       (poops remains the fallback for the 9.05 / 11.40 gap). */
                     if (fw <= 5.50f) {
                         wkali_log("[WKALI] Detected firmware %.2f <= 5.50, caching umtx2 exploit\n", fw);
-                    } else if (fw <= 12.00f) {
-                        wkali_log("[WKALI] Detected firmware %.2f <= 12.00, caching poops exploit\n", fw);
+                    } else if (fw < 7.00f) {
+                        wkali_log("[WKALI] Detected firmware %.2f (6.x gap), caching umtx2 exploit\n", fw);
+                    } else if (fw < 9.05f) {
+                        wkali_log("[WKALI] Detected firmware %.2f, caching relapse exploit\n", fw);
+                    } else if (fw < 9.20f) {
+                        wkali_log("[WKALI] Detected firmware %.2f (9.05 gap), caching poops exploit\n", fw);
+                    } else if (fw < 11.40f) {
+                        wkali_log("[WKALI] Detected firmware %.2f, caching relapse exploit\n", fw);
+                    } else if (fw < 11.60f) {
+                        wkali_log("[WKALI] Detected firmware %.2f (11.40 gap), caching poops exploit\n", fw);
                     } else {
-                        wkali_log("[WKALI] Detected firmware %.2f > 12.00, caching p2jb exploit\n", fw);
+                        wkali_log("[WKALI] Detected firmware %.2f, caching relapse exploit\n", fw);
                     }
                 }
 
@@ -247,12 +260,25 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
                         int keep = 1;
                         if (strcmp(WKALI_FORCE_EXPLOIT, "umtx2") == 0) {
                             if (strstr(line, "/slopkit/")) keep = 0;
+                        } else if (strcmp(WKALI_FORCE_EXPLOIT, "relapse") == 0) {
+                            if (strstr(line, "/slopkit/") || strstr(line, "/umtx2/")) keep = 0;
                         } else if (strcmp(WKALI_FORCE_EXPLOIT, "poops") == 0
                             || strcmp(WKALI_FORCE_EXPLOIT, "p2jb") == 0) {
                             if (strstr(line, "/umtx2/")) keep = 0;
                         } else {
-                            if (fw <= 5.50f && strstr(line, "/slopkit/")) keep = 0;
-                            if (fw > 5.50f && strstr(line, "/umtx2/")) keep = 0;
+                            /* Auto mode: keep the chain that app.js will arm for
+                               this firmware. umtx2 for <= 5.50 (and the 6.x gap);
+                               relapse is the default for 7.00-13.60; poops is the
+                               fallback for the 9.05 / 11.40 gap. */
+                            if (fw < 7.00f) {
+                                if (strstr(line, "/slopkit/")) keep = 0;
+                            } else if (fw < 9.05f || (fw >= 9.20f && fw < 11.40f) || fw >= 11.60f) {
+                                /* relapse default: strip the other chains */
+                                if (strstr(line, "/slopkit/") || strstr(line, "/umtx2/")) keep = 0;
+                            } else {
+                                /* poops fallback (9.05 / 11.40): strip the others */
+                                if (strstr(line, "/umtx2/")) keep = 0;
+                            }
                         }
                         
                         if (keep) {
