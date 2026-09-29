@@ -85,10 +85,10 @@ BUILD_TIME_PLACEHOLDER = b"[[BUILD_TIME_PLACEHOLDER]]"
 EXPLOIT_MODE_PLACEHOLDER = b"[[EXPLOIT_MODE]]"
 APP_DIR_PLACEHOLDER = b"[[APP_DIR_PLACEHOLDER]]"
 
-# The build-time exploit override in app.js (auto | umtx2 | poops | p2jb).
+# The build-time exploit override in app.js (auto | umtx2 | poops | p2jb | relapse).
 # Defaults to "auto" (firmware routing) unless FORCE_EXPLOIT is set.
 DEFAULT_EXPLOIT_MODE = "auto"
-EXPLOIT_MODES = ("auto", "umtx2", "poops", "p2jb")
+EXPLOIT_MODES = ("auto", "umtx2", "poops", "p2jb", "relapse")
 
 
 def get_version_info_with_handoff(dist_dir):
@@ -198,6 +198,13 @@ def p2jb_iframe_url(app_dir):
 def umtx2_iframe_url(app_dir):
     return app_dir + "/umtx2/index.html?autoload=payload.elf&v=1"
 
+
+# relapse auto-runs its chain on load (no ?go= needed); the URL carries the
+# autoload payload name + a fixed cache-bust. Keep in sync with RELAPSE_URL in
+# frontend/autoloader/app.js.
+def relapse_iframe_url(app_dir):
+    return app_dir + "/relapse/index.html?autoload=payload.elf&v=1"
+
 # slopkit references its own scripts with cache-busting query strings
 # (e.g. "./core.js?v=final", "main.js?v=final", "../offsets/9.00.js?v=final").
 # AppCache matches URLs exactly, so the manifest must list those query
@@ -226,6 +233,12 @@ def collect_cachebust_urls(files):
     for path, _ in files:
         if "/slopkit/offsets/" in path and path.endswith(".js"):
             urls.add(path + "?v=final")
+    # relapse loads its offsets as `offsets/<fw>.js?v=final` (a template
+    # literal in main.js, so the regex scan above can't see the filenames) —
+    # enumerate every offsets file's ?v=final variant explicitly.
+    for path, _ in files:
+        if "/relapse/offsets/" in path and path.endswith(".js"):
+            urls.add(path + "?v=final")
     return sorted(urls)
 
 
@@ -250,6 +263,7 @@ def build_manifest(files, version, build_time, app_dir, pointer_path, marker_pat
     lines.append(poops_iframe_url(app_dir))
     lines.append(p2jb_iframe_url(app_dir))
     lines.append(umtx2_iframe_url(app_dir))
+    lines.append(relapse_iframe_url(app_dir))
     lines += collect_cachebust_urls(files)
     lines.append(pointer_path)
     lines.append(marker_path)
