@@ -1,5 +1,5 @@
 diff --git a/src/kexp.js b/src/kexp.js
-index 7bfdf79c2cde5aa06a0f26608862bc92091d6b44..10ede456323137ecc28de5a5ae374126748afb49 100644
+index 7bfdf79c2cde5aa06a0f26608862bc92091d6b44..945d8ba8212c971889015afadbf8b4db44722e19 100644
 --- a/src/kexp.js
 +++ b/src/kexp.js
 @@ -91,14 +91,14 @@ function resolveSymbols(p) {
@@ -8,16 +8,16 @@ index 7bfdf79c2cde5aa06a0f26608862bc92091d6b44..10ede456323137ecc28de5a5ae374126
  
 -async function fetchBinary(name) {
 -  const response = await fetch("payloads/" + name);
-+async function fetchBinary(name, base) {
-+  const response = await fetch((base || "payloads/") + name);
++async function fetchBinary(name, dir) {
++  const response = await fetch((dir || "payloads/") + name);
    if (!response.ok) throw new Error("kexp: " + name + " returned HTTP " + response.status);
    return new Uint8Array(await response.arrayBuffer());
  }
  
 -async function mapElf(name, p, chain) {
 -  const elf = await fetchBinary(name);
-+async function mapElf(name, p, chain, base) {
-+  const elf = await fetchBinary(name, base);
++async function mapElf(name, p, chain, dir) {
++  const elf = await fetchBinary(name, dir);
    if (elf.length < 0x1000 || readU32(elf, 0) !== 0x464c457f)
      throw new Error("kexp: " + name + " is not an ELF");
  
