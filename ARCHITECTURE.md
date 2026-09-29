@@ -218,8 +218,10 @@ The patch (in `relapse/src/main.js` and `relapse/src/kexp.js`):
   keydown handler) — the autoloader always arms the page with `?autoload=`, so the chain
   is autoload-only. `loadOptionalPayloads` (the R2 payload sender) is removed with it.
 - Adds an exported `autoloadPayload(name, p, chain, log)` in `kexp.js` that reuses the
-  existing `mapElf`/`connectToElfldr`/`sendElf` (a `base` param is added to
-  `fetchBinary`/`mapElf` so the shared dir can be targeted).
+  existing `mapElf`/`connectToElfldr`/`sendElf` (a `dir` param is added to
+  `fetchBinary`/`mapElf` so the shared dir can be targeted — named `dir`, not `base`,
+  because `mapElf`'s body already declares `const base` for the mmap address and a
+  same-scope redeclaration is a SyntaxError in strict-mode ES modules).
 - **Fixes the offset cache-bust**: upstream loads `offsets/<fw>.js?v=<Date.now()>`, a
   dynamic query that defeats AppCache offline serving. The patch pins it to
   `offsets/<fw>.js?v=final`, and `tools/gen_file_registry.py` enumerates every
