@@ -10,3 +10,6 @@
 [submodule "third_party/ps5-elfldr"]
 	path = third_party/ps5-elfldr
 	url = https://github.com/itsPLK/ps5-elfldr.git
+[submodule "third_party/relapse"]
+	path = third_party/relapse
+	url = https://github.com/ntfargo/Relapse-Exploit.git
