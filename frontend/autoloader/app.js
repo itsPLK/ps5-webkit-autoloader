@@ -59,6 +59,11 @@
   var UMTX2_FIRMWARES = ["1.00", "1.01", "1.02", "1.05", "1.10", "1.11", "1.12", "1.13", "1.14", "2.00", "2.20", "2.25", "2.26", "2.30", "2.50", "2.70", "3.00", "3.10", "3.20", "3.21", "4.00", "4.02", "4.03", "4.50", "4.51", "5.00", "5.02", "5.10", "5.50"];
   var POOPS_FIRMWARES = ["7.00", "7.01", "7.20", "7.40", "7.60", "7.61", "8.00", "8.20", "8.40", "8.60", "9.00", "9.05", "9.20", "9.40", "9.60", "10.00", "10.01", "10.20", "10.40", "10.60", "11.00", "11.20", "11.40", "11.60", "12.00"];
   var P2JB_FIRMWARES = ["12.02", "12.20", "12.40", "12.60", "12.70"];
+  /* Relapse is the default chain for 7.00-13.60. Keep in sync with
+     relapse/src/firmware.js's supportedFirmware list. It covers 12.02-12.70
+     (superseding p2jb) and 7.00-13.60; poops remains the fallback for the two
+     firmwares Relapse doesn't list (9.05, 11.40). */
+  var RELAPSE_FIRMWARES = ["7.00", "7.01", "7.20", "7.40", "7.60", "7.61", "8.00", "8.20", "8.40", "8.60", "9.00", "9.20", "9.40", "9.60", "10.00", "10.01", "10.20", "10.40", "10.60", "11.00", "11.20", "11.60", "12.00", "12.02", "12.20", "12.40", "12.60", "12.70", "13.00", "13.20", "13.40", "13.42", "13.60"];
 
   var UMTX2_URL =
     'umtx2/index.html?autoload=payload.elf&v=1';
@@ -70,6 +75,11 @@
     'slopkit/slopkit/poops.html?go=1&auto=1&production=1&trigger=netcontrol&attempts=8&only=ps0_preflight,ps1_prepare,ps3_stage0,ps4_validate,ps5_stage1,ps6_stage2,ps8_stage3,ps9_stage4,ps10_stage5&log=debug&payload=1&autoload=payload.elf&v=final';
   var P2JB_URL =
     'slopkit/slopkit/p2jb.html?go=1&auto=1&production=1&log=debug&payload=1&autoload=payload.elf&v=final';
+  /* Relapse auto-runs its chain on load (no ?go= needed); the autoload payload
+     name + a fixed cache-bust are carried in the query. Keep in sync with
+     RELAPSE_URL in tools/gen_file_registry.py. */
+  var RELAPSE_URL =
+    'relapse/index.html?autoload=payload.elf&v=1';
 
   var EXPLOIT_URL = '';
   var exploitMode = null;
@@ -107,20 +117,20 @@
   /* Choose which exploit to arm. Forced modes (build-time EXPLOIT_MODE or a
      ?force= query on this page) bypass the firmware table so a specific chain
      can be exercised on any firmware — the exploit page's own firmware guard
-     still applies. Returns 'umtx2' | 'poops' | 'p2jb' | null. */
+     still applies. Returns 'umtx2' | 'relapse' | 'poops' | 'p2jb' | null. */
   function pickExploit() {
     var fw = detectFirmware();
     var forced = null;
     try {
       var q = new URLSearchParams(window.location.search).get('force');
-      if (q === 'umtx2' || q === 'poops' || q === 'p2jb') forced = q;
+      if (q === 'umtx2' || q === 'relapse' || q === 'poops' || q === 'p2jb') forced = q;
     } catch (e) { }
     if (forced) {
       uiLog('[force] using ' + forced + ' on firmware ' + (fw ? fw.str : 'unknown'), 'warning');
       return forced;
     }
-    if (EXPLOIT_MODE === 'umtx2' || EXPLOIT_MODE === 'poops'
-      || EXPLOIT_MODE === 'p2jb') {
+    if (EXPLOIT_MODE === 'umtx2' || EXPLOIT_MODE === 'relapse'
+      || EXPLOIT_MODE === 'poops' || EXPLOIT_MODE === 'p2jb') {
       uiLog('[force] using ' + EXPLOIT_MODE + ' on firmware ' + (fw ? fw.str : 'unknown'), 'warning');
       return EXPLOIT_MODE;
     }
@@ -129,11 +139,15 @@
       return null;
     }
     if (UMTX2_FIRMWARES.indexOf(fw.str) !== -1) return 'umtx2';
+    /* Relapse is the default for 7.00-13.60. It is checked before poops so it
+       wins the 7.00-12.00 overlap; poops then catches the two firmwares
+       Relapse doesn't list (9.05, 11.40). p2jb is a dead auto-fallback since
+       Relapse covers 12.02-12.70, but is kept for the force path. */
+    if (RELAPSE_FIRMWARES.indexOf(fw.str) !== -1) return 'relapse';
     if (POOPS_FIRMWARES.indexOf(fw.str) !== -1) return 'poops';
     if (P2JB_FIRMWARES.indexOf(fw.str) !== -1) return 'p2jb';
     uiLog('[ERROR] Unsupported firmware ' + fw.str +
-      ' (supported: 1.00-5.50 via umtx2, 7.00-12.00 via poops,'
-      + ' 12.02-12.70 via p2jb).', 'error');
+      ' (supported: 1.00-5.50 via umtx2, 7.00-13.60 via relapse).', 'error');
     return null;
   }
 
@@ -380,6 +394,43 @@
         umtx2LastEntry.textContent = '[umtx2] ' + lastText;
         umtx2LastText = lastText;
       }
+    }
+  }
+
+  /* Mirror Relapse's live #console log (#console > div) from the same-origin
+     exploit iframe into our own log view. Relapse's writeLog() renders each
+     line as "[marker] message" where the marker is "+" (info/success),
+     "-" (error) or "*" (plain log). We strip the marker and map it onto our
+     severity classes. Relapse only ever appends to #console (it does not
+     rewrite lines in place), so we stream just the new tail. */
+  var relapseMirroredLines = 0;
+  function mirrorRelapse() {
+    var doc;
+    try {
+      doc = exploitEl.contentDocument;
+    } catch (e) {
+      return;
+    }
+    if (!doc || !chainStarted) return;
+    var lines = doc.querySelectorAll('#console > div');
+    if (lines.length < relapseMirroredLines) {
+      /* Iframe reloaded (#console recreated) — restart from a fresh document. */
+      relapseMirroredLines = lines.length;
+    }
+    for (; relapseMirroredLines < lines.length; relapseMirroredLines++) {
+      var el = lines[relapseMirroredLines];
+      var text = (el.textContent || '').trim();
+      if (!text) continue;
+      /* Relapse prefixes each line with a severity marker: "+", "-" or "*". */
+      var type = 'info';
+      var m = /^\[([*+-])\]\s*/.exec(text);
+      if (m) {
+        if (m[1] === '-') type = 'error';
+        else if (m[1] === '+') type = 'success';
+        text = text.slice(m[0].length);
+      }
+      if (!text) continue;
+      uiLog('[relapse] ' + text, type);
     }
   }
 
@@ -812,6 +863,10 @@
       mirrorUmtx2();
       return;
     }
+    if (exploitMode === 'relapse') {
+      mirrorRelapse();
+      return;
+    }
     if (exploitMode === 'p2jb') {
       mirrorP2jb();
       return;
@@ -843,9 +898,10 @@
       return;
     }
     exploitMode = picked;
-    EXPLOIT_URL = picked === 'umtx2' ? UMTX2_URL
-      : picked === 'p2jb' ? P2JB_URL
-        : POOPS_URL;
+    if (picked === 'umtx2') EXPLOIT_URL = UMTX2_URL;
+    else if (picked === 'relapse') EXPLOIT_URL = RELAPSE_URL;
+    else if (picked === 'p2jb') EXPLOIT_URL = P2JB_URL;
+    else EXPLOIT_URL = POOPS_URL;
 
     /* p2jb's own ticker repaints at exactly 1 Hz — polling any faster only
        burns shared-thread time; the fast chains keep 500 ms for snappier
