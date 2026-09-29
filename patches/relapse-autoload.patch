@@ -1,0 +1,126 @@
+diff --git a/src/kexp.js b/src/kexp.js
+index 7bfdf79c2cde5aa06a0f26608862bc92091d6b44..10ede456323137ecc28de5a5ae374126748afb49 100644
+--- a/src/kexp.js
++++ b/src/kexp.js
+@@ -91,14 +91,14 @@ function resolveSymbols(p) {
+   return resolved;
+ }
+ 
+-async function fetchBinary(name) {
+-  const response = await fetch("payloads/" + name);
++async function fetchBinary(name, base) {
++  const response = await fetch((base || "payloads/") + name);
+   if (!response.ok) throw new Error("kexp: " + name + " returned HTTP " + response.status);
+   return new Uint8Array(await response.arrayBuffer());
+ }
+ 
+-async function mapElf(name, p, chain) {
+-  const elf = await fetchBinary(name);
++async function mapElf(name, p, chain, base) {
++  const elf = await fetchBinary(name, base);
+   if (elf.length < 0x1000 || readU32(elf, 0) !== 0x464c457f)
+     throw new Error("kexp: " + name + " is not an ELF");
+ 
+@@ -153,18 +153,18 @@ async function sendElf(name, payload, p, chain) {
+   }
+ }
+ 
+-export async function loadOptionalPayloads(p, chain, log) {
+-  log("preparing optional payloads");
+-  const kstuff = await mapElf("kstuff.elf", p, chain);
+-  const shadowmount = await mapElf("shadowmountplus.elf", p, chain);
+-  const etaHEN = await mapElf("etaHEN.elf", p, chain);
+-  await sendElf("kstuff.elf", kstuff, p, chain);
+-  log("kstuff.elf sent");
+-  await new Promise((resolve) => setTimeout(resolve, 3000));
+-  await sendElf("shadowmountplus.elf", shadowmount, p, chain);
+-  log("shadowmountplus.elf sent");
+-  await sendElf("etaHEN.elf", etaHEN, p, chain);
+-  log("etaHEN.elf sent");
++/* WKAL: autoload a single payload from the shared payloads dir (../payloads/,
++   one level up from src/ — the same dir the autoloader's payload.elf lives in)
++   and send it to the running ELF loader on port 9021. connectToElfldr()
++   already retries until the loader is accepting, so no explicit wait is needed.
++   Returns the number of bytes sent. */
++export async function autoloadPayload(name, p, chain, log) {
++  const say = typeof log === "function" ? log : () => {};
++  say("mapping " + name + " from shared payloads dir");
++  const payload = await mapElf(name, p, chain, "../payloads/");
++  say("sending " + name + " to the ELF loader on port 9021");
++  await sendElf(name, payload, p, chain);
++  return payload.size;
+ }
+ 
+ function patchShellcode(blob, symbols) {
+diff --git a/src/main.js b/src/main.js
+index 991746764608b341a8cec1bb8fdd434715b7433b..931f1c93dc637a98f79a9654b1c4a5f7e5d6a859 100644
+--- a/src/main.js
++++ b/src/main.js
+@@ -80,17 +80,13 @@ function log(message, type = "log") {
+   window.writeLog(message, type);
+ }
+ 
+-function watchR2(onPress) {
+-  function onKey(event) {
+-    if (event.key !== "F8" || event.code !== "Unidentified") return;
+-    window.removeEventListener("keydown", onKey, true);
+-    event.preventDefault();
+-    onPress();
+-  }
+-
+-  log("press R2 to load kstuff, shadowmountplus and etaHEN", "info");
+-  window.addEventListener("keydown", onKey, true);
+-}
++/* WKAL: the autoloader arms this page with ?autoload=<name> (default
++   payload.elf). After the kernel stage boots the ELF loader on port 9021 we
++   autoload that payload from the shared payloads dir (../payloads/, one level
++   up from src/) and report the result to the parent page with a wkal message.
++   The R2 "press to load" flow is not used here. */
++const AUTOLOAD_NAME =
++  new URLSearchParams(window.location.search).get("autoload") || "payload.elf";
+ 
+ const ROP_WAIT_MS = 20000;
+ 
+@@ -281,14 +277,25 @@ async function main(userlandRW) {
+   if (result.payloads) {
+     log("kernel exploit complete", "info");
+     log("elfldr is listening on port 9021", "info");
+-    watchR2(async () => {
++    /* WKAL: autoload the configured payload (default payload.elf) from the
++       shared payloads dir and report the result to the parent page. */
++    log("autoloading " + AUTOLOAD_NAME, "info");
++    try {
++      const { autoloadPayload } = await import("./kexp.js");
++      const bytes = await autoloadPayload(AUTOLOAD_NAME, p, chain, (message) => log(message, "info"));
++      log(AUTOLOAD_NAME + " sent (" + bytes + " bytes)", "success");
+       try {
+-        const { loadOptionalPayloads } = await import("./kexp.js");
+-        await loadOptionalPayloads(p, chain, (message) => log(message, "info"));
+-      } catch (error) {
+-        log(error instanceof Error ? error.message : String(error), "error");
+-      }
+-    });
++        window.parent.postMessage(
++          { type: "wkal", kind: "autoload", ok: true, bytes: bytes }, "*");
++      } catch (e) {}
++    } catch (error) {
++      const why = error instanceof Error ? error.message : String(error);
++      log("autoload failed: " + why, "error");
++      try {
++        window.parent.postMessage(
++          { type: "wkal", kind: "autoload", ok: false, why: why }, "*");
++      } catch (e) {}
++    }
+   } else {
+     log("kernel chain complete: root and sandbox escape are active", "info");
+   }
+@@ -297,4 +304,6 @@ async function main(userlandRW) {
+ const fwScript = document.createElement("script");
+ document.body.appendChild(fwScript);
+ 
+-fwScript.setAttribute("src", `offsets/${window.fw_str}.js?v=` + Date.now());
+\ No newline at end of file
++/* WKAL: fixed cache-bust (?v=final) so the AppCache manifest can serve the
++   offsets offline. The original used Date.now(), which defeats caching. */
++fwScript.setAttribute("src", `offsets/${window.fw_str}.js?v=final`);
+\ No newline at end of file
