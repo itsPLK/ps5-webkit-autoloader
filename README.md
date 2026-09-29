@@ -3,7 +3,7 @@
 </p>
 <h1 align="center">PS5 WebKit Autoloader</h1>
 &nbsp;
-<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>1.00&ndash;5.50</b> and <b>7.00&ndash;12.70</b>.</p>
+<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>1.00&ndash;5.50</b> and <b>7.00&ndash;13.60</b>.</p>
 
 <p align="center">
   <a href=".github/screenshots/webkit_autoloader.jpeg"><img src=".github/screenshots/webkit_autoloader.jpeg" width="260" alt="WebKit Autoloader - exploit running" /></a>
@@ -90,7 +90,7 @@ The latest installer payload will re-create the homescreen app and refresh the c
 <Details>
 <Summary><i>How to use a custom ELF Loader?</i></Summary>
 
-On firmwares 7.00–12.70 (slopkit: poops and p2jb), the autoloader uses a custom version of **elfldr** that only accepts connections from the PS5 itself (localhost). This improves security by preventing unauthorized devices on your network from sending payloads to your console. On firmwares 1.00–5.50 (umtx2), the stock elfldr is booted.
+On firmwares 7.00–13.60 (relapse, the default chain), the autoloader boots the **Relapse elfldr** and autoloads your payload through it. On firmwares 1.00–5.50 (umtx2), the stock elfldr is booted. (The poops / p2jb slopkit chains — still available via `FORCE_EXPLOIT` — use a custom **elfldr** that only accepts connections from the PS5 itself (localhost), which improves security by preventing unauthorized devices on your network from sending payloads to your console.)
 
 If you want to use a "normal" ELF Loader that allows sending payloads from any device, you can simply load it through **Payload Manager**.
 
@@ -119,6 +119,7 @@ The technical internals and project architecture are documented in **[ARCHITECTU
 ## Credits
 
 * **[idlesauce](https://github.com/idlesauce)** & contributors — [umtx2](https://github.com/idlesauce/umtx2)
+* **[ntfargo](https://github.com/ntfargo)** & contributors — [Relapse-Exploit](https://github.com/ntfargo/Relapse-Exploit) (default chain for 7.00–13.60)
 * **[jordyidk](https://github.com/jordyidk)** & contributors — [slopkit](https://github.com/jordyidk/slopkit)
 * **[soniciso1](https://github.com/soniciso1)** — [pooP2JB](https://github.com/soniciso1/pooP2JB)
 * **[john-tornblom](https://github.com/john-tornblom)** — [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk/) and [elfldr](https://github.com/ps5-payload-dev/elfldr)

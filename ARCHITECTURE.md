@@ -1,14 +1,18 @@
 # PS5 WebKit Autoloader: Architecture
 
 A persistent entry point for PS5 payloads that runs a WebKit/kernel exploit chain
-and autoloads your payloads fully offline. Three exploit chains are bundled and
+and autoloads your payloads fully offline. Four exploit chains are bundled and
 selected by firmware:
 
 - **umtx2** (FW 1.00–5.50) — idlesauce umtx2 chain (`umtx2/`).
-- **poops** (FW 7.00–12.00) — slopkit poops chain (`slopkit/poops.html`).
-- **p2jb** (FW 12.02–12.70) — slopkit P2JB chain (`slopkit/p2jb.html`). Takes ~1 hour.
+- **relapse** (FW 7.00–13.60) — ntfargo Relapse-Exploit chain (`relapse/`). **The
+  default chain** for the 7.00+ range.
+- **poops** (FW 7.00–12.00) — slopkit poops chain (`slopkit/poops.html`). Fallback
+  for the two firmwares Relapse doesn't list (9.05, 11.40); otherwise force-only.
+- **p2jb** (FW 12.02–12.70) — slopkit P2JB chain (`slopkit/p2jb.html`). Takes ~1
+  hour; superseded by relapse, force-only.
 
-All three converge on the same result: a `WKAL00001` homescreen app that runs the
+All four converge on the same result: a `WKAL00001` homescreen app that runs the
 exploit, boots elfldr, and autoloads your payload through it.
 
 ## Repository layout
@@ -21,10 +25,10 @@ exploit, boots elfldr, and autoloads your payload through it.
 | `pc-host/` | The PC host script (`host.py`) + overrides for the bootstrap flow |
 | `src/` | Native installer ELF (HTTP server, app installer, browser launcher) |
 | `include/` | Headers, incl. generated `wkali_version.h` and `file_registry.{h,c}` |
-| `patches/` | The slopkit and umtx2 autoloader patch files |
+| `patches/` | The slopkit, umtx2 and relapse autoloader patch files |
 | `tools/` | Build, version, icon, registry scripts, and dependency downloader |
 | `assets/` | Icon source and PS5 app metadata templates |
-| `third_party/` | `slopkit`, `umtx2`, `ps5-elfldr` and `ps5-unified-autoloader` submodules (pinned) |
+| `third_party/` | `slopkit`, `umtx2`, `relapse`, `ps5-elfldr` and `ps5-unified-autoloader` submodules (pinned) |
 
 ## Two setup flows
 
@@ -42,13 +46,15 @@ instead of the unified-autoloader — so this flow installs the homescreen app.
 
 - A splash screen, a log terminal and a progress bar. The exploit runs in a **hidden**
   same-origin iframe. On load, `app.js` picks the chain from the firmware in
-  the user-agent (`PlayStation 5/x.xx`): **umtx2** for 1.00–5.50, **poops** for 7.00–12.00,
-  and **p2jb** for 12.02–12.70.
-- A `FORCE_EXPLOIT` build-time override (`auto | umtx2 | poops | p2jb`; or a `?force=`
-  query) bypasses the table so a specific chain can be exercised on any firmware; the
-  exploit's own firmware guard still applies.
+  the user-agent (`PlayStation 5/x.xx`): **umtx2** for 1.00–5.50, **relapse** for
+  7.00–13.60 (the default for the 7.00+ range), and **poops** as the fallback for the
+  two firmwares Relapse doesn't list (9.05, 11.40). p2jb is a force-only fallback.
+- A `FORCE_EXPLOIT` build-time override (`auto | umtx2 | relapse | poops | p2jb`; or a
+  `?force=` query) bypasses the table so a specific chain can be exercised on any
+  firmware; the exploit's own firmware guard still applies.
 - umtx2 auto-runs its chain via the `on_load_autorun` sessionStorage key (set by
-  `app.js` before arming); poops and p2jb run via their `?go=1&auto=1` query.
+  `app.js` before arming); relapse auto-runs on load (no `?go=` needed); poops and p2jb
+  run via their `?go=1&auto=1` query.
 - On `window.load` the iframe is armed; at script parse it is blanked to `about:blank` so a
   WebProcess-crash page restore never auto-runs the chain. Before arming, `clearSlopkitState()`
   removes the slopkit one-shot latch and "stopped at …" markers from sessionStorage (shared
@@ -120,13 +126,14 @@ dev server.
 ## Build system
 
 - `make`: `all` (ELF), `host` (standalone host script), `dev` (local preview server),
-  `slopkit-prepare`, `umtx2-prepare`, `payload-deps`, `version`, `icons`, `clean`.
+  `slopkit-prepare`, `umtx2-prepare`, `relapse-prepare`, `payload-deps`, `version`,
+  `icons`, `clean`.
 - `tools/gen_file_registry.py` walks the staged `frontend/dist/`, compresses each file (raw
   DEFLATE) and emits the C registry + the AppCache manifest. It pins the version from the
   staging handoff (`dist/VERSION`), writes the `__complete__` marker, substitutes the tokens
   in the pointer page and the app's versioned `index.html`, lists the pointer and marker LAST
   in the manifest, and replaces the `[[EXPLOIT_MODE]]` token in `app.js` from the
-  `FORCE_EXPLOIT` env (`auto | umtx2 | poops | p2jb`, default `auto`). Unused exploit payloads
+  `FORCE_EXPLOIT` env (`auto | umtx2 | relapse | poops | p2jb`, default `auto`). Unused exploit payloads
   and assets are filtered out.
 - `build_release.sh` builds the ELF in a Dockerized SDK and the host script; CI
   (`.github/workflows/release.yml`) produces the versioned artifacts and the Windows `.exe`.
@@ -189,13 +196,53 @@ To update umtx2: `git -C third_party/umtx2 fetch && git -C third_party/umtx2 che
 re-run the script, and regenerate `patches/umtx2-autoload.patch` if it no longer applies. Keep the
 `?v=` cache-buster on `UMTX2_IFRAME_URL` in `app.js`/`gen_file_registry.py` in sync.
 
+## Relapse integration
+
+`relapse` is a pinned, **pristine** submodule (`third_party/relapse`, ntfargo's
+Relapse-Exploit). The build copies it to the gitignored `frontend/autoloader/relapse/`
+and applies `patches/relapse-autoload.patch` there (`tools/apply_relapse_patch.sh`, run
+automatically by the Makefile). The copy drops `serve.py`/`README.md`/`LICENSE` (not
+needed at runtime) and prunes the bundled `payloads/` dir down to the chain's own
+`elfldr-ps5-1360.elf` and `kexp_*.bin` — the three R2-only ELFs
+(`kstuff.elf`, `shadowmountplus.elf`, `etaHEN.elf`) are dropped because the autoloader's
+`?autoload=` payload comes from the shared `/app/payloads/` dir instead.
+
+The patch (in `relapse/src/main.js` and `relapse/src/kexp.js`):
+
+- `?autoload=<name>` (default `payload.elf`): after the kernel stage boots the ELF loader
+  on port 9021, `main()` autoloads that payload from the shared `../payloads/` dir and
+  posts `{type:"wkal", kind:"autoload", ok, bytes}` (or `{ok:false, why}`) to the parent
+  page. `connectToElfldr()` already retries until the loader is accepting, so no explicit
+  wait is needed.
+- **Strips the "press R2 to load kstuff/shadowmountplus/etaHEN" flow** (`watchR2` and the
+  keydown handler) — the autoloader always arms the page with `?autoload=`, so the chain
+  is autoload-only. `loadOptionalPayloads` (the R2 payload sender) is removed with it.
+- Adds an exported `autoloadPayload(name, p, chain, log)` in `kexp.js` that reuses the
+  existing `mapElf`/`connectToElfldr`/`sendElf` (a `base` param is added to
+  `fetchBinary`/`mapElf` so the shared dir can be targeted).
+- **Fixes the offset cache-bust**: upstream loads `offsets/<fw>.js?v=<Date.now()>`, a
+  dynamic query that defeats AppCache offline serving. The patch pins it to
+  `offsets/<fw>.js?v=final`, and `tools/gen_file_registry.py` enumerates every
+  `relapse/offsets/*.js?v=final` entry in the manifest (parallel to the slopkit-offsets
+  block).
+
+Relapse boots its **own** elfldr (`relapse/payloads/elfldr-ps5-1360.elf`), matching umtx2
+(which also boots its own elfldr) — the shared localhost-only elfldr is used by the slopkit
+chains only. `runKexp`'s `DEFAULT_ELFLDR`/`DEFAULT_KEXP` paths are unchanged.
+
+To update relapse: `git -C third_party/relapse fetch && git -C third_party/relapse checkout <commit>`,
+re-run `tools/apply_relapse_patch.sh`, and regenerate `patches/relapse-autoload.patch` if it
+no longer applies. Keep `RELAPSE_FIRMWARES` in `app.js` in sync with `relapse/src/firmware.js`'s
+`supportedFirmware` list, and `RELAPSE_URL` in `app.js`/`gen_file_registry.py` in sync.
+
 ## Shared elfldr
 
 Both slopkit chains boot the **shared** elfldr, served at `/app/<version>/shared/elfldr-ps5.elf`
 (staged from `frontend/autoloader/shared/`). `tools/download_deps.sh` fetches it from the pinned
 `itsPLK/ps5-elfldr` release (tag `ELFLDR_TAG`), sha256-verifies it, and caches the digest in a
-`.sha256` sidecar so offline rebuilds work. umtx2 (FW 1.00–5.50) boots its **own** elfldr from
-the umtx2 submodule instead, matching stock umtx2 behavior.
+`.sha256` sidecar so offline rebuilds work. umtx2 (FW 1.00–5.50) and relapse (FW 7.00–13.60)
+boot their **own** elfldr from their respective submodules instead (umtx2 like stock umtx2;
+relapse uses `relapse/payloads/elfldr-ps5-1360.elf`), matching each chain's stock behavior.
 
 ## Payload dependency
 
@@ -218,8 +265,9 @@ names.
 
 - The ELF serves the autoloader under `/app/<version>/`; the PC host maps `/app/` to its root.
 - Never put `manifest="..."` on the autoloader page — caching is the installer page's job.
-- Never edit `third_party/slopkit/` or `third_party/umtx2/`, nor the generated
-  `frontend/autoloader/slopkit/` / `frontend/autoloader/umtx2/` — edit the patch files instead.
+- Never edit `third_party/slopkit/`, `third_party/umtx2/` or `third_party/relapse/`, nor the
+  generated `frontend/autoloader/slopkit/` / `frontend/autoloader/umtx2/` /
+  `frontend/autoloader/relapse/` — edit the patch files instead.
 - The pointer page (`frontend/pointer/`) and the manifest ordering are the partial-cache guard:
   keep `__complete__` the LAST cache entry and never reorder it before the pointer.
 - After changing `host.py`, rebuild the host (`make host` / `build_release.sh`).
