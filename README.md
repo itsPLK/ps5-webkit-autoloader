@@ -136,7 +136,12 @@ This project is licensed under the GPL-3.0 License.
 ## Donate
 - [donate to PLK](DONATE.md)
 
-## Changelog
+## Star History
 
-See [CHANGELOG.md](CHANGELOG.md) for current release notes. For previous release changelogs, see [GitHub Releases](https://github.com/itsPLK/ps5-webkit-autoloader/releases).
-
+<a href="https://www.star-history.com/?repos=itsplk%2Fps5-webkit-autoloader&type=date&releases=&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=itsplk/ps5-webkit-autoloader&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=itsplk/ps5-webkit-autoloader&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=itsplk/ps5-webkit-autoloader&type=date&legend=bottom-right" />
+ </picture>
+</a>
