@@ -31,7 +31,7 @@ There are two ways to set up the autoloader, depending on whether you're already
 
 1. Download `webkit-autoloader-installer_vX.Y.Z.elf` from the [Releases](https://github.com/itsPLK/ps5-webkit-autoloader/releases) page.
 2. Send it to your PS5 with `elfldr`, or launch it from Payload Manager.
-3. The installer opens the browser to cache the autoloader page (choose Poops or Relapse if prompted), creates the **WebKit Autoloader** app on the homescreen, and exits.
+3. The installer opens the browser to cache the autoloader page, creates the **WebKit Autoloader** app on the homescreen, and exits.
 4. **Reboot once**, then launch **WebKit Autoloader** from the homescreen.
 
 ### Not jailbroken yet

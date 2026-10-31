@@ -49,8 +49,6 @@
       z-index: 20;
     }
 
-
-
     main {
       max-width: 42rem;
       padding: 2rem;
@@ -231,95 +229,6 @@
       color: #e2e8f0;
     }
 
-    #choice {
-      margin-top: 1.5rem;
-      width: 100%;
-      max-width: 38rem;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    #choice[hidden] {
-      display: none !important;
-    }
-
-    .choice-grid {
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      gap: 1.25rem;
-      margin-top: 1rem;
-      text-align: left;
-    }
-
-    .choice-card {
-      -webkit-box-flex: 1;
-      -webkit-flex: 1;
-      flex: 1;
-      background: #1b2436;
-      border: 2px solid #2c3e5a;
-      border-radius: 12px;
-      padding: 1.5rem 1.25rem;
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-orient: vertical;
-      -webkit-box-direction: normal;
-      -webkit-flex-direction: column;
-      flex-direction: column;
-      cursor: pointer;
-      color: inherit;
-      font-family: inherit;
-      -webkit-transition: border-color 0.2s, -webkit-transform 0.2s, background-color 0.2s;
-      transition: border-color 0.2s, transform 0.2s, background-color 0.2s;
-      outline: none;
-    }
-
-    .choice-card.selected {
-      border-color: rgba(56, 189, 248, 0.4);
-      background-color: rgba(56, 189, 248, 0.05);
-    }
-
-    .choice-card:hover,
-    .choice-card:focus {
-      border-color: #38bdf8;
-      background-color: #22304a;
-      -webkit-transform: translateY(-2px);
-      transform: translateY(-2px);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.4);
-    }
-
-    .choice-card:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      pointer-events: none;
-    }
-
-    .choice-card .choice-title {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: #38bdf8;
-      margin-bottom: 0.25rem;
-    }
-
-    .choice-card .choice-fw {
-      display: inline-block;
-      align-self: flex-start;
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: #7dd3fc;
-      background: rgba(56, 189, 248, 0.12);
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      border-radius: 4px;
-      padding: 0.15rem 0.5rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .choice-card .choice-desc {
-      font-size: 0.95rem;
-      color: #cbd5e1;
-      line-height: 1.5;
-    }
     [hidden] {
       display: none !important;
     }
@@ -356,7 +265,6 @@
     @media (max-width: 560px) {
       body { height: auto; display: block; }
       main { padding: 2rem 1rem; }
-      .choice-grid { -webkit-flex-direction: column; flex-direction: column; }
       h1 { font-size: 2rem; }
       #footer {
         position: static;
@@ -377,21 +285,6 @@
     <h1>WebKit Autoloader Installer</h1>
     <p id="status">Caching content...</p>
     <p id="detail">Please wait a moment. Do not close this page yet!</p>
-
-    <div id="choice" hidden>
-      <div class="choice-grid">
-        <button type="button" class="choice-card" id="poops">
-          <div class="choice-title">Poops</div>
-          <div class="choice-fw">FW 7.00 &ndash; 12.00</div>
-          <div class="choice-desc">Works completely offline. Does not require any network connection or active network interface.</div>
-        </button>
-        <button type="button" class="choice-card" id="relapse">
-          <div class="choice-title">Relapse</div>
-          <div class="choice-fw">FW 7.00 &ndash; 13.60</div>
-          <div class="choice-desc">Requires an active network interface (Wi-Fi or Ethernet). Internet access is not required.</div>
-        </button>
-      </div>
-    </div>
 
     <div id="progress" role="progressbar" aria-label="Cache download" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
       <div id="progressBar"></div>
@@ -426,7 +319,6 @@
   var version = '[[VERSION_PLACEHOLDER]]';
   var progress = document.getElementById('progress');
   var percent = document.getElementById('percent');
-  var choice = document.getElementById('choice');
   var cacheReady = false;
   var detail = document.getElementById('detail');
   var progressBar = document.getElementById('progressBar');
@@ -479,92 +371,17 @@
     repairOverlay.hidden = true;
   };
 
-  // Two keys, on this origin, which the homescreen app shares:
-  //   wkal_exploit  the chain of the last install that actually completed. The
-  //                 pointer reads this, so a new choice never clears it.
-  //   wkal_pending  the chain being installed right now, discarded if the
-  //                 install does not finish.
-  // Both chain pages are cached either way, so changing either costs nothing and
-  // invalidates nothing.
-  function readKey(key) {
-    try { return window.localStorage.getItem(key); } catch (error) { return null; }
-  }
-  function writeKey(key, value) {
-    try {
-      if (value === null) window.localStorage.removeItem(key);
-      else window.localStorage.setItem(key, value);
-    } catch (error) { }
-  }
-  function valid(chain) { return chain === 'poops' || chain === 'relapse'; }
-
-  var installed = readKey('wkal_exploit');
-  if (!valid(installed)) installed = null;
-  var picked = readKey('wkal_pending');
-  if (!valid(picked)) picked = null;
-
   var match = /PlayStation 5\/(\d+\.\d+)/.exec(navigator.userAgent);
+  var params = typeof location !== 'undefined' && location.search ? new URLSearchParams(location.search) : null;
+  var fwArg = params ? params.get('fw') : null;
+  if (!match && fwArg) {
+    match = ['PlayStation 5/' + fwArg, fwArg];
+  }
   var fw = match ? parseFloat(match[1]) : 0;
   var hasPoops = fw >= 7 && fw <= 12;
-  var hasRelapse = fw >= 7 && fw <= 13.60 && fw !== 9.05;
-
-  var params = new URLSearchParams(location.search);
-  var asked = params.get('exploit');
-  if (valid(asked)) {
-    // This is the reload that follows a choice. The server only serves the
-    // manifest attribute when the request carries a supported one, so reaching
-    // here means caching can start. Record the intent as pending; it only becomes
-    // the installed chain once /install succeeds.
-    picked = asked;
-    writeKey('wkal_pending', asked);
-  }
-
-  // A chain this firmware cannot run is not a usable choice.
-  if (picked === 'poops' && !hasPoops) picked = null;
-  if (picked === 'relapse' && !hasRelapse) picked = null;
-  if (installed === 'poops' && !hasPoops) installed = null;
-  if (installed === 'relapse' && !hasRelapse) installed = null;
-
+  var is905 = match ? (match[1] === '9.05' || Math.abs(fw - 9.05) < 0.001) : Math.abs(fw - 9.05) < 0.001;
+  var hasRelapse = fw >= 7 && fw <= 13.60 && !is905;
   var unsupported = !!match && !hasPoops && !hasRelapse;
-  // Firmware with only one usable chain needs no question: the server serves
-  // this page with its manifest attribute straight away, so record the intent.
-  if (!unsupported && !picked) {
-    var single = hasPoops && !hasRelapse ? 'poops' : hasRelapse && !hasPoops ? 'relapse' : null;
-    if (single) {
-      picked = single;
-      writeKey('wkal_pending', single);
-    }
-  }
-  // Ask whenever the firmware supports both chains and this request carries no
-  // choice, exactly as before the refactor. The server withholds the manifest
-  // attribute in that state, so nothing downloads while the buttons are up.
-  var dualSupported = (hasPoops && hasRelapse) || !match;
-  var needsChoice = !unsupported && dualSupported && !asked;
-
-  function showChoice(message) {
-    status.textContent = 'Select Exploit';
-    detail.textContent = (match ? 'Firmware ' + match[1] : 'Your firmware') +
-      ' supports both Poops and Relapse.\n' + message;
-    choice.hidden = false;
-    if (installed) document.getElementById(installed).className += ' selected';
-  }
-
-  function choose(chain) {
-    document.getElementById('poops').disabled = true;
-    document.getElementById('relapse').disabled = true;
-    // Recorded as pending on this origin, which the homescreen app shares, so
-    // the intent survives the reboot. It becomes the installed chain only once
-    // /install succeeds. Then reload with the choice in the query string: the
-    // server serves the entry page without its manifest attribute until a
-    // supported choice is present, so this reload is what starts the cache.
-    writeKey('wkal_pending', chain);
-    picked = chain;
-    status.textContent = 'Selected ' + (chain === 'poops' ? 'Poops' : 'Relapse') + '...';
-    detail.textContent = 'Preparing cache download...';
-    params.set('exploit', chain);
-    location.replace(location.pathname + '?' + params.toString());
-  }
-  document.getElementById('poops').onclick = function () { choose('poops'); };
-  document.getElementById('relapse').onclick = function () { choose('relapse'); };
 
   // offerRepair defaults to true; pass false to report a failure without
   // pointing at clearing WebKit data, which is the wrong remedy for anything
@@ -583,17 +400,10 @@
   }
 
   function install() {
-    if (failed || cacheReady) return;
+    if (failed || cacheReady || installing) return;
     cacheReady = true;
-    setProgress(100);
-    maybeInstall();
-  }
-
-  // Caching and the choice can finish in either order; both are needed.
-  function maybeInstall() {
-    if (!cacheReady || failed || installing) return;
-    if (!picked) return;
     installing = true;
+    setProgress(100);
     status.textContent = 'Installing homescreen shortcut...';
     detail.textContent = 'The offline cache is ready. Keep this page open.';
     // Check the active cache before creating its homescreen shortcut.
@@ -605,11 +415,10 @@
       })
       .then(function (response) {
         if (!response.ok) throw new Error('Install failed. Run the installer again.');
-        // Only now is this the installed chain. Until this point the previous
-        // install is still intact and still usable, which is why the choice was
-        // never cleared on the way in.
-        writeKey('wkal_exploit', picked);
-        writeKey('wkal_pending', null);
+        try {
+          window.localStorage.removeItem('wkal_pending');
+          window.localStorage.removeItem('wkal_exploit');
+        } catch (error) { }
         stopLogs();
         status.textContent = 'Installed successfully';
         status.className = 'success';
@@ -645,17 +454,6 @@
     fetch('/exit').catch(function () { });
     return;
   }
-  if (needsChoice) {
-    // Nothing is downloading behind this prompt: the server withholds the
-    // manifest attribute until a choice comes back in the query string.
-    showChoice(installed
-      ? 'Choose an exploit. Currently installed: ' + installed + '.'
-      : 'Select which one to install:');
-    progress.hidden = true;
-    percent.hidden = true;
-    document.getElementById(installed || 'poops').focus();
-    return;
-  }
 
   if (!cache) {
     status.textContent = 'This browser does not support offline AppCache.';
@@ -663,6 +461,7 @@
     progress.hidden = true;
     return;
   }
+
   pollLogs();
   cache.addEventListener('downloading', function () {
     downloading = true;

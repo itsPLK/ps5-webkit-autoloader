@@ -167,3 +167,67 @@ body {
   #progressLabel { font-size: 0.85rem; padding: 0 0.5rem; text-align: center; }
   #footer { font-size: 0.65rem; }
 }
+
+/* LuaK1t log section */
+.luak1t-box {
+  background: #05102a;
+  border: 1px solid #1c3d73;
+  border-left: 3px solid #0055ff;
+  border-radius: 6px;
+  margin: 10px 0;
+  padding: 8px 12px 10px 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+.luak1t-header {
+  display: flex;
+  justify-content: flex-start;
+  text-align: left;
+  margin-bottom: 6px;
+  user-select: none;
+}
+.luak1t-badge {
+  font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  line-height: 1.2;
+  background: #000080;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+.luak1t-content {
+  width: 100%;
+}
+.luak1t-box .log-star,
+.luak1t-box .log-info,
+.luak1t-box .log-cyan,
+.luak1t-box .log-log {
+  color: #e6edf3;
+}
+
+/* Minimal HUD */
+#hud {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  background: rgba(13, 17, 23, 0.88);
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 6px 12px;
+  z-index: 1000;
+  font-size: 13px;
+  text-align: right;
+  line-height: 1.4;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+#hud-addr {
+  display: none !important;
+}
+#hud-fw {
+  color: #58a6ff;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}

@@ -6,61 +6,55 @@ firmware offsets, the ROP worker, Poops, Relapse, and the standalone runtime.
 It also owns the shared native installer helpers and SDK Docker recipe. This
 repository provides `include/installer_config.h` for its app name, title ID,
 assets and log prefix. Remote-loader has no dependency on this repository.
-The installer has a small exploit chooser and cache progress bar. The exploit
-runs directly in the standalone page, without an iframe or generated-code patches.
+The installer provides a cache progress bar and automatically caches the
+autoloader page without requiring user intervention. The exploit runs directly in the
+standalone page, without an iframe or generated-code patches.
 
 ## Runtime
 
-`tools/build_standalone.py` builds **one standalone page per chain**, and each
-page carries three ordinary payloads. The loader first prepares the WebKit memory
-primitive and ROP worker, then runs this queue:
+`tools/build_modular_page.py` stages the modular frontend directory (`index.html`,
+`style.css`, `app.js`, `src/`, `offsets/`, `shared/`, `payloads/`, and the payload ELF).
+The entry page (`index.html`) is lightweight (~1.3 KB), while all scripts, firmware
+offsets, and binary payloads are pre-cached individually via HTML5 AppCache (`cache.appcache`)
+and requested via standard relative URLs. This keeps the JavaScript heap virtually empty
+when `src/webkit.js` starts, avoiding Out-Of-Memory (OOM) crashes on the PS5.
 
-1. `elfldr-check.js` connects to `127.0.0.1:9021` without sending data. If a loader
-   accepts the connection, it requests `api.stopQueue()`, closes its socket, and
-   skips both remaining payloads. A refused connection allows the queue to proceed;
-   an unexpected probe or cleanup error stops it instead of retrying a kernel
-   exploit blindly. No kernel access is required for this check.
-2. `poops.js` (or `relapse.js`) runs unmodified from the submodule. It establishes
-   kernel access and brings up elfldr/kexp itself on port 9021.
-3. `autoload.js` then stages the bundled ELF into an anonymous mapping and streams
-   it to elfldr. It selects nothing: the page is already built for one chain.
+The autoloader runs `payloads/autoloader.js` as its entry orchestrator payload:
 
-The payload queue runs in order: `[1/3] elfldr-check.js`, `[2/3] poops.js`
-(or `relapse.js`), then `[3/3] autoload.js`. Each payload runs directly in the page
-context without wrappers.
+1. `isElfldrRunning(api)` probes `127.0.0.1:9021` via loopback TCP connect. If an
+   ELF loader is already accepting connections, the environment is already active:
+   it logs success, skips the kernel exploit and autoload, and exits cleanly.
+2. `isJailbroken(api)` probes if the process already has root privileges (`uid 0`
+   via `syscall(24)`). If already jailbroken, it skips the kernel exploit and autoload.
+3. If exploitation is needed, `selectExploit(api)` automatically selects the best
+   exploit based on firmware version and network status:
+   - **FW > 12.00 and FW <= 13.60**: `payloads/lua/relapse.lua` (Poops does not support > 12.00)
+   - **FW == 9.05**: `payloads/poops.js` (Relapse does not support 9.05)
+   - **Active network connection (`navigator.onLine`)**: `payloads/lua/relapse.lua` (faster, reliable)
+   - **Offline (FW <= 12.00)**: `payloads/poops.js` (works without active network connection)
+4. The orchestrator pre-fetches the chosen exploit code, `payloads/autoload.js`, and the target
+   payload ELF into memory *before* running the kernel exploit, ensuring no post-kernel network
+   requests are needed.
+5. The orchestrator executes the chosen exploit via `await api.executePayload(exploitCode)`.
+   This shares the underlying ROP chain, WebKit memory primitive, kernel R/W handle (`api.krw`),
+   and on-screen logging. For `relapse.lua`, the WebAssembly Lua runtime VM executes the script
+   and brings up `elfldr` on 9021.
+6. The orchestrator then executes `autoload.js` via
+   `await api.executePayload(autoloadCode, [elfName, elfBytes])`, which stages the pre-fetched
+   ELF into anonymous memory and streams it to `elfldr` on loopback port 9021.
 
-The installation flow is choose, then cache:
+The installation and dispatch flow is fully automated:
 
-1. The installer page loads with no `?exploit=`. On firmware that supports both
-   chains it shows the prompt, records nothing, and — importantly — registers no
-   AppCache handlers, so nothing downloads behind the buttons.
-2. The server withholds `manifest="/cache.appcache"` from the entry page until the
-   request carries a supported `?exploit=`, because AppCache starts on that
-   attribute and JS runs too late to stop it. Firmware with only one chain needs
-   no question, so it is served with the attribute immediately.
-3. Choosing records `localStorage.wkal_pending` and reloads with the choice. That
-   reload is what starts the cache.
+1. The installer page loads. On all supported firmwares (7.00–13.60), caching
+   starts immediately without user intervention or manual exploit pickers.
+2. The server withholds `manifest="/cache.appcache"` only when the requesting
+   firmware is unsupported, stopping AppCache before it begins. Supported
+   firmwares are served with the attribute immediately.
+3. The modular files are downloaded individually into AppCache.
 4. Once the cache completes, the page checks the `__complete__` marker and calls
-   `/install`. Only on success is `wkal_pending` promoted to `wkal_exploit` and
-   cleared.
-
-Two keys, so the one the pointer reads means "an install completed". A choice is
-never written over the installed one on the way in, so a failed install leaves the
-previous autoloader intact and launchable; only a finished `/install` changes what
-is installed. This is also what makes "Currently installed: X" in the prompt
-truthful rather than "whatever was last clicked".
-
-Both chain pages are cached once caching starts, so switching later costs nothing
-and never re-downloads anything.
-
-The server's part is decided strictly per request, from the query string and the
-User-Agent, without maintaining server-side state or remembered choices.
-
-**Both chain pages are always cached (~9.4 MB uncompressed).** The cached bytes
-therefore do not depend on the choice, so switching chains changes one storage key
-and touches nothing in the AppCache — there is no cache to invalidate. This is
-deliberate and load bearing: caching both pages at once makes subsequent chain
-switches instant and offline, with zero network or cache invalidation risk.
+   `/install` to create the homescreen shortcut.
+5. On subsequent launches from the homescreen, the pointer page (`/app/index.html`)
+   checks cache completeness and navigates directly to `/app/<version>/index.html`.
 
 The server's only selection logic is deciding per request whether to include the
 `manifest="/cache.appcache"` attribute on `/index.html`. It stores no selection state
@@ -76,28 +70,26 @@ network interface, but no Internet access.
 `Makefile` calls the upstream builders without transforming their output:
 
 - `make page`: verify/download dependencies, then call `tools/build_standalone.py`
-  once per chain with `payloads/elfldr-check.js`, that chain's exploit, then
-  `payloads/autoload.js::<payload_elf>`, plus
-  `--elfldr` and `--embed <payload_elf>=<file>`. Outputs: `build/autoloader/{poops,relapse}.html`.
-  The exploits are submodule paths, resolved relative to the submodule root.
+  with `payloads/autoloader.js::<payload_elf>`, `--elfldr`, and `--embed` for
+  `poops.js`, `relapse.lua`, `autoload.js`, and the payload ELF.
+  Output: `build/autoloader/index.html`.
 - `make all`: stage the installer page, stable pointer and generated HTML; generate
   a compressed C registry and AppCache manifest; compile `installer.elf` with the
   PS5 SDK. Both installers compile remote-loader's `installer/common` sources;
   product-specific main loops and HTTP routing stay in their own repositories.
   Docker provides the SDK and libmicrohttpd from remote-loader's Docker recipe.
-- `make host HOST_PAYLOAD=<installer.elf>`: build standalone setup pages for both
-  chains (Relapse and Poops) embedding that installer, then package them via
-  remote-loader's `tools/build_host.py` into `webkit-autoloader-host.py`. At runtime,
-  the host serves Relapse by default and automatically routes firmwares incompatible
-  with Relapse (9.05) to Poops.
+- `make host HOST_PAYLOAD=<installer.elf>`: build a single standalone setup page
+  embedding that installer, then package it via remote-loader's `tools/build_host.py`
+  into `webkit-autoloader-host.py`. At runtime, the single setup page auto-dispatches
+  the optimal exploit based on FW and network.
   Use a versioned ELF path outside the native `installer.elf` target when building
   the host on a machine without the SDK.
-- `make dev`: serve the generated chain pages on localhost:8123.
+- `make dev`: serve the generated page on localhost:8123.
 - `make clean`: remove generated pages, registry and unversioned artifacts; retain
   verified downloads in `build/deps/` for offline rebuilds.
 
 `PAGE_CSS` and `PAGE_JS` default to `frontend/autoloader/style.css` and `app.js`,
-providing the log panel, progress bar, and status footer on both chain pages and the
+providing the log panel, progress bar, and status footer on the autoloader page and the
 PC setup page. The script moves the existing console into the panel and observes
 its log lines for progress; it never wraps the exploit or replaces its APIs.
 Completion waits for the queue summary, including payload cleanup. An existing
@@ -142,15 +134,13 @@ the installer ELF for the PC setup host) is embedded via `--embed`.
 
 ## Offline installation
 
-The installer serves on `127.0.0.1:18181` only. On dual-chain firmwares, its browser
-page prompts the user to select Poops or Relapse before starting caching. Choosing
-reloads with `?exploit=<chain>`, allowing the HTTP server to include the manifest
-attribute. The page displays AppCache download progress and calls `/install` once
-caching completes (`cached`, `noupdate`, or `updateready`). Upon successful install,
-`wkal_pending` is promoted to `wkal_exploit` in `localStorage`. The installer validates
-the version marker before creating the shortcut. Cache errors leave the installer
-running and offer a user-confirmed WebKit-data clear; the native installer then
-reopens the browser to retry.
+The installer serves on `127.0.0.1:18181` only. On all supported firmwares
+(7.00–13.60), caching begins immediately without manual selection prompts. The
+page displays AppCache download progress and calls `/install` once caching completes
+(`cached`, `noupdate`, or `updateready`). The unified autoloader page (`index.html`)
+is cached. The installer validates the version marker before creating the homescreen
+shortcut. Cache errors leave the installer running and offer a user-confirmed
+WebKit-data clear; the native installer then reopens the browser to retry.
 
 The cache layout is:
 
@@ -159,15 +149,14 @@ The cache layout is:
 /logo.svg                    installer logo asset
 /cache.appcache              generated manifest
 /app/index.html              stable homescreen pointer
-/app/<version>/poops.html    chain page: elfldr-check.js, poops.js, then autoload.js
-/app/<version>/relapse.html  chain page: elfldr-check.js, relapse.js, then autoload.js
+/app/<version>/index.html    unified autoloader page (orchestrator + embedded exploits & payload)
 /app/<version>/__complete__  version marker, last in CACHE
 ```
 
-The pointer checks the marker before navigating, then sends the user to the chain
-page they chose, so partial cache downloads cannot start the app. The HTTP server
-serves the standalone chain pages verbatim. It withholds the installer's manifest
-attribute until a supported choice is present, as described above.
+The pointer checks the marker before navigating, then navigates to `/app/<version>/index.html`.
+Partial cache downloads cannot start the app. The HTTP server serves the standalone
+page verbatim. It withholds the installer's manifest attribute only when the requesting
+firmware is unsupported, stopping AppCache before it begins.
 
 `SIMULATE=1|2` and `tools/build_cache_corruption_test_elfs.sh` are available for
 hardware testing of failed-cache repair.
@@ -188,11 +177,14 @@ probe failure. `tools/test_autoload_payload.js` covers
 the third payload: ELF staging into the mapping, the hand-off to elfldr, short
 socket writes, the missing-`krw` refusal and cleanup on failure.
 `tools/test_installer.js` checks the installer's cache events, the marker gate,
-choice gating in both orders, error handling, repair confirmation and the pointer.
-`tools/test_selection_flow.js` checks that a pick is stored on the origin and that
-the pointer routes to the matching chain page, that lone-chain firmware neither
-prompts nor leaves the choice unset, and that both chain pages are staged and
-cached so a switch never invalidates anything.
+immediate automatic caching on bare load, error handling, repair confirmation and
+pointer redirection.
+`tools/test_selection_flow.js` checks that automatic caching begins across all
+supported firmwares, that unsupported firmwares are gated and rejected, that the
+pointer routes to `index.html`, that `selectExploit()` in `autoloader.js` automatically
+selects the optimal exploit based on firmware and network status, that the orchestrator
+skips when elfldr/root is already active, and that the single standalone `index.html`
+page is staged and cached.
 
 Upstream `third_party/ps5-webkit-remote-loader/tools/probe_standalone.js` and
 `tools/boot_probe.js` check the generated HTML, inline resources, modules, firmware

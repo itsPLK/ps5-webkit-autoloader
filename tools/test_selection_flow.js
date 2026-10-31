@@ -1,20 +1,20 @@
-// The chain choice must survive the whole round trip, and only be asked when
-// firmware genuinely supports both chains.
-//
-// This is the invariant the installer depends on:
-//   pick in the installer page -> stored on the origin -> the pointer sends the
-//   user to that chain's page -> that page runs that chain's exploit
-//
-// The property this file pins hardest: BOTH chain pages are always cached, so a
-// chain switch is one storage key and touches nothing in the AppCache. Every
-// earlier failure in this area came from mechanisms that tried to make the cache
-// depend on the choice.
+// The autoloader builds a single standalone index.html page carrying
+// payloads/autoloader.js as a unified orchestrator. At runtime:
+//   1. It probes 127.0.0.1:9021 for an active ELF loader.
+//   2. It probes if the process is already jailbroken (uid 0).
+//   3. If exploit is needed, it auto-dispatches based on FW and network:
+//      - FW > 12.00 and FW <= 13.60 -> relapse.lua
+//      - FW == 9.05 -> poops.js
+//      - Active network connection (navigator.onLine) -> relapse.lua
+//      - Otherwise (offline, FW <= 12.00) -> poops.js
+//   4. It dynamically executes the chosen exploit via api.executePayload().
+//   5. It dynamically executes autoload.js to stream autoload.elf to elfldr.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
 const FW = [
-  // fw,      poops, relapse  (as the installer page computes it)
+  // fw,      poops, relapse  (as computed by the firmware checks)
   ['7.00', true, true], ['7.61', true, true], ['8.60', true, true],
   ['9.00', true, true], ['9.05', true, false], ['9.60', true, true],
   ['10.01', true, true], ['11.00', true, true], ['11.40', true, true],
@@ -28,12 +28,14 @@ function loadPage(options) {
   const html = fs.readFileSync('frontend/installer-page/index.html', 'utf8');
   const code = html.match(/<script>([\s\S]*?)<\/script>/)[1]
     .replaceAll('[[VERSION_PLACEHOLDER]]', 'test-version');
-  const nodes = Object.fromEntries(['status', 'repair', 'choice', 'poops', 'relapse', 'progress', 'percent', 'detail', 'progressBar', 'logContainer',
+  const nodes = Object.fromEntries(['status', 'repair', 'progress', 'percent', 'detail', 'progressBar', 'logContainer',
     'cacheCorruptOverlay', 'cancelRepair', 'repairMessage']
     .map(key => [key, { hidden: true, className: '', textContent: '', style: {}, focus() {},
       setAttribute(key, value) { this[key] = String(value); },
       removeAttribute(key) { delete this[key]; } }]));
   nodes.status.textContent = 'Caching content...';
+  nodes.progress.hidden = false;
+  nodes.percent.hidden = false;
   nodes.progress['aria-valuenow'] = '0';
   const saved = new Map(Object.entries(options.seed || {}));
   const listeners = {};
@@ -50,7 +52,10 @@ function loadPage(options) {
       this.getResponseHeader = () => '42';
     },
     document: { getElementById: key => nodes[key] },
-    navigator: { userAgent: options.fw ? 'PlayStation 5/' + options.fw : 'Mozilla/5.0' },
+    navigator: {
+      userAgent: options.fw ? 'PlayStation 5/' + options.fw : (options.ua !== undefined ? options.ua : 'Mozilla/5.0'),
+      onLine: options.onLine !== undefined ? options.onLine : true,
+    },
     localStorage: {
       getItem: key => (saved.has(key) ? saved.get(key) : null),
       setItem: (key, value) => { saved.set(key, value); },
@@ -89,9 +94,14 @@ function loadPointer(options) {
   const saved = new Map(Object.entries(options.seed || {}));
   let target;
   const sandbox = {
+    URLSearchParams,
     document: { getElementById: key => nodes[key] },
+    navigator: {
+      userAgent: options.fw ? 'PlayStation 5/' + options.fw : (options.ua !== undefined ? options.ua : 'Mozilla/5.0'),
+      onLine: options.onLine !== undefined ? options.onLine : true,
+    },
     localStorage: { getItem: key => (saved.has(key) ? saved.get(key) : null) },
-    location: { replace: path => { target = path; } },
+    location: { search: options.search || '', replace: path => { target = path; } },
     fetch: async () => ({ text: async () => (options.incomplete ? 'wrong' : 'test-version') }),
   };
   sandbox.window = sandbox;
@@ -100,121 +110,214 @@ function loadPointer(options) {
   return { nodes, target: () => target };
 }
 
-const only = fw => {
-  const row = FW.find(r => r[0] === fw);
-  return row[1] && !row[2] ? 'poops' : !row[1] && row[2] ? 'relapse' : null;
-};
+/* ---- autoloader orchestrator: payloads/autoloader.js ----------------------- */
+
+const autoloaderSrc = fs.readFileSync('payloads/autoloader.js', 'utf8');
+
+function testSelectExploit(options) {
+  const sandbox = {
+    URLSearchParams,
+    location: { search: options.search || '' },
+    navigator: {
+      userAgent: options.fw ? 'PlayStation 5/' + options.fw : (options.ua !== undefined ? options.ua : 'Mozilla/5.0'),
+      onLine: options.onLine !== undefined ? options.onLine : true,
+    },
+  };
+  vm.createContext(sandbox);
+  const code = `(function() {
+    ${autoloaderSrc.replace('return async function', 'return selectExploit; return async function')}
+  })()(${JSON.stringify(options.api || {})})`;
+  return vm.runInContext(code, sandbox);
+}
 
 (async () => {
-  // 1. dual-chain firmware asks on a bare load, and nothing may cache behind the
-  //    prompt: the page registers no AppCache handlers at all, and the server
-  //    withholds the manifest attribute, so the progress bar cannot race the
-  //    buttons.
-  for (const fw of FW.filter(r => r[1] && r[2]).map(r => r[0])) {
-    for (const pick of ['poops', 'relapse']) {
-      const page = loadPage({ fw });
-      assert.equal(page.nodes.choice.hidden, false, fw + ': should ask');
-      assert.equal(Object.keys(page.listeners).length, 0,
-        fw + ': nothing may cache while the prompt is up');
-      page.nodes[pick].onclick();
-      assert.equal(page.saved.get('wkal_pending'), pick, fw + ': did not record ' + pick);
-      // The reload is what starts the cache: the server serves the manifest
-      // attribute only when the request carries a supported choice.
-      const params = new URLSearchParams(page.target().split('?')[1]);
-      assert.equal(params.get('exploit'), pick, fw + ': must reload with the choice');
-
-      // ...and that reload must cache, with no prompt.
-      const after = loadPage({ fw, search: '?exploit=' + pick });
-      assert.equal(after.nodes.choice.hidden, true, fw + ': must not ask again');
-      assert(Object.keys(after.listeners).length > 0, fw + ': caching must start after the choice');
-    }
-  }
-
-  // 2. lone-chain firmware never asks and stores that chain on its own
-  for (const fw of FW.filter(r => !(r[1] && r[2])).map(r => r[0])) {
-    const chain = only(fw);
+  // 1. All supported firmwares start caching immediately on bare load without
+  //    requiring user interaction or manual selection.
+  for (const [fw] of FW) {
     const page = loadPage({ fw });
-    assert.equal(page.nodes.choice.hidden, true, fw + ': must not ask');
-    assert.equal(page.saved.get('wkal_pending'), chain, fw + ': should record ' + chain);
     assert(Object.keys(page.listeners).length > 0,
-      fw + ': a single-chain console must cache without a prompt');
+      fw + ': caching must start immediately without user intervention');
+    assert.equal(page.nodes.progress.hidden, false);
+    assert.equal(page.logRequests[0].path, '/logs?pos=0');
   }
 
-  // 3. unsupported firmware refuses outright and signals /exit to the server
-  const dead = loadPage({ fw: '5.50' });
-  assert.match(dead.nodes.status.textContent, /Unsupported/);
-  assert.equal(dead.saved.get('wkal_exploit'), undefined);
-  assert(dead.requests.includes('/exit'), 'unsupported firmware must request /exit to stop the installer daemon');
-
-  // 4. a saved choice is honoured, but the prompt still appears so switching is
-  //    always available -- as before the refactor, where the prompt was driven by
-  //    the query string alone and a stored choice never suppressed it.
-  for (const installed of ['poops', 'relapse']) {
-    const page = loadPage({ fw: '11.00', seed: { wkal_exploit: installed } });
-    assert.equal(page.nodes.choice.hidden, false, 'an installed choice must not suppress the prompt');
-    assert.match(page.nodes.detail.textContent, new RegExp('Currently installed: ' + installed));
-    // Choosing records the intent as pending and must not touch the installed
-    // one: a failed install must not leave the app with no chain at all.
-    const other = installed === 'poops' ? 'relapse' : 'poops';
-    page.nodes[other].onclick();
-    assert.equal(page.saved.get('wkal_pending'), other, 'the click must record a pending choice');
-    assert.equal(page.saved.get('wkal_exploit'), installed,
-      'the installed choice must survive until the install finishes');
+  // 2. Unsupported firmware refuses outright and signals /exit to the server.
+  for (const deadFw of ['5.50', '6.72', '14.00']) {
+    const dead = loadPage({ fw: deadFw });
+    assert.match(dead.nodes.status.textContent, /Unsupported/);
+    assert.equal(Object.keys(dead.listeners).length, 0, deadFw + ': unsupported firmware must not cache');
+    assert(dead.requests.includes('/exit'), 'unsupported firmware must request /exit to stop the installer daemon');
   }
-  // The reload keeps the intent pending; it is not promoted until /install says so.
-  const mid = loadPage({ fw: '11.00', search: '?exploit=relapse', seed: { wkal_exploit: 'poops' } });
-  assert.equal(mid.saved.get('wkal_pending'), 'relapse');
-  assert.equal(mid.saved.get('wkal_exploit'), 'poops', 'must not promote before /install succeeds');
-  // ...and one this firmware cannot run is replaced by the only chain that works.
-  const stale = loadPage({ fw: '13.60', seed: { wkal_exploit: 'poops' } });
-  assert.equal(stale.saved.get('wkal_pending'), 'relapse',
-    'an unusable chain must be replaced, not left to fail later');
-  assert.equal(stale.nodes.choice.hidden, true, 'a single-chain console should not be asked');
 
-  // 5. after the choice, install waits only for the cache. The choice can no
-  //    longer arrive late, because caching cannot start without it.
+  // 3. Cache completion finishes the installation and requests /install.
   for (const event of ['cached', 'noupdate', 'updateready']) {
-    const page = loadPage({ fw: '11.00', search: '?exploit=poops' });
+    const page = loadPage({ fw: '11.00' });
     page.listeners[event]();
     await flush();
     assert.deepEqual(page.requests, ['/app/test-version/__complete__', '/install'],
       event + ': should install once the cache completes');
-    assert.equal(page.saved.get('wkal_exploit'), 'poops', 'the choice must be recorded');
+    assert.match(page.nodes.status.textContent, /Installed/);
   }
 
-  // 6. the pointer sends the user to the chain they chose
-  for (const chain of ['poops', 'relapse']) {
-    const pointer = loadPointer({ seed: { wkal_exploit: chain } });
-    await flush();
-    assert.equal(pointer.target(), '/app/test-version/' + chain + '.html');
-  }
-  const unmarked = loadPointer({});
+  // 4. Pointer redirects directly to the single index.html on complete cache.
+  const pOnline = loadPointer({ fw: '11.00', onLine: true });
   await flush();
-  assert.equal(unmarked.target(), undefined, 'no choice means no redirect');
-  assert.match(unmarked.nodes.status.textContent, /installer again/);
+  assert.equal(pOnline.target(), '/app/test-version/index.html');
 
-  // 7. both chain pages are always cached, so switching costs nothing
-  const registry = fs.readFileSync('tools/gen_file_registry.py', 'utf8');
-  assert(!/selected_exploit/.test(registry),
-    'gen_file_registry.py must not list selected_exploit; the choice is not cached');
-  // Checked in the Makefile as well as the generated manifest: the manifest on
-  // disk is a stale build artifact and would hide a change to staging.
-  const makefile = fs.readFileSync('Makefile', 'utf8');
-  assert(/for chain in \$\(CHAINS\)/.test(makefile) &&
-    /cp build\/autoloader\/\$\$chain\.html \$\(STAGE\)\/app\/\$\(BUILD_VERSION\)\/\$\$chain\.html/.test(makefile),
-  'the Makefile must stage every chain page, or a switch would need a cache update');
-  const dist = 'frontend/dist/cache.appcache';
-  if (fs.existsSync(dist)) {
-    const manifest = fs.readFileSync(dist, 'utf8');
-    for (const chain of ['poops', 'relapse']) {
-      assert(manifest.includes('/' + chain + '.html'),
-        chain + '.html must be a CACHE entry, or a chain switch would need a cache update');
+  const pOffline = loadPointer({ fw: '11.00', onLine: false });
+  await flush();
+  assert.equal(pOffline.target(), '/app/test-version/index.html');
+
+  const pDeskFw = loadPointer({ ua: 'Mozilla/5.0', search: '?fw=9.05' });
+  await flush();
+  assert.equal(pDeskFw.target(), '/app/test-version/index.html?fw=9.05');
+
+  for (const badFw of ['5.50', '6.72', '14.00']) {
+    const bad = loadPointer({ fw: badFw });
+    await flush();
+    assert.equal(bad.target(), undefined, badFw + ' must not redirect');
+    assert.match(bad.nodes.status.textContent, /Unsupported/);
+  }
+
+  const incomplete = loadPointer({ fw: '11.00', incomplete: true });
+  await flush();
+  assert.equal(incomplete.target(), undefined, 'Incomplete cache must not redirect');
+  assert.match(incomplete.nodes.status.textContent, /incomplete/);
+
+  // 5. Automatic exploit dispatch logic in payloads/autoloader.js:
+  //    Rule 1: FW > 12.00 and FW <= 13.60 -> relapse.lua (both online and offline)
+  for (const fw of ['12.02', '12.70', '13.00', '13.60']) {
+    for (const onLine of [true, false]) {
+      const choice = testSelectExploit({ fw, onLine });
+      assert(choice.file.endsWith('relapse.lua'), fw + ' (onLine: ' + onLine + ') must choose relapse.lua');
+      assert.deepEqual([...choice.args], ['compat=remote_lua_loader'], 'relapse.lua must receive compat=remote_lua_loader');
     }
   }
 
-  // 8. The server may look at the request, but must hold no selection *state*.
-  //    A remembered choice is what got wiped mid-download and came back stale;
-  //    everything here is recomputed from the query string and User-Agent.
+  //    Rule 2: FW == 9.05 -> poops.js (both online and offline)
+  for (const onLine of [true, false]) {
+    const choice = testSelectExploit({ fw: '9.05', onLine });
+    assert(choice.file.endsWith('poops.js'), '9.05 (onLine: ' + onLine + ') must choose poops.js');
+    assert.deepEqual([...choice.args], [], 'poops.js does not need compat args');
+  }
+
+  //    Rule 3 & 4: Dual-supported firmwares (7.00 - 12.00 except 9.05):
+  //    Online -> relapse.lua (faster, reliable)
+  //    Offline -> poops.js (works without network)
+  for (const fw of ['7.00', '7.61', '8.60', '9.00', '9.60', '10.01', '11.00', '11.40', '12.00']) {
+    const choiceOnline = testSelectExploit({ fw, onLine: true });
+    assert(choiceOnline.file.endsWith('relapse.lua'), fw + ' online must choose relapse.lua');
+    assert.deepEqual([...choiceOnline.args], ['compat=remote_lua_loader'], 'online relapse.lua must receive compat=remote_lua_loader');
+
+    const choiceOffline = testSelectExploit({ fw, onLine: false });
+    assert(choiceOffline.file.endsWith('poops.js'), fw + ' offline must choose poops.js');
+    assert.deepEqual([...choiceOffline.args], [], 'offline poops.js does not need compat args');
+  }
+
+  //    Desktop query param ?fw= selection:
+  const desk905 = testSelectExploit({ ua: 'Mozilla/5.0', search: '?fw=9.05', onLine: true });
+  assert(desk905.file.endsWith('poops.js'));
+  assert.deepEqual([...desk905.args], []);
+
+  const desk1300 = testSelectExploit({ ua: 'Mozilla/5.0', search: '?fw=13.00', onLine: false });
+  assert(desk1300.file.endsWith('relapse.lua'));
+  assert.deepEqual([...desk1300.args], ['compat=remote_lua_loader']);
+
+  // 6. Test the orchestrator execution flow in payloads/autoloader.js
+  const AsyncFunction = (async function () {}).constructor;
+  const runner = new AsyncFunction('api', autoloaderSrc);
+
+  function makeMockApi(options = {}) {
+    const executed = [];
+    const logs = [];
+    const memory = new Map();
+    let next = 0x20000000;
+    function pointer(low) {
+      return { low: low >>> 0, hi: 0, add32(n) { return pointer(this.low + n); } };
+    }
+    return {
+      executed,
+      logs,
+      args: ['custom.elf'],
+      log: async (msg, type) => { logs.push({ msg, type }); },
+      p: {
+        malloc: size => { const p = pointer(next); next += size; return p; },
+        write1: (p, v) => { memory.set(p.low, v); },
+      },
+      chain: {
+        syscall: async (nr, ...args) => {
+          if (nr === 0x61) return pointer(10); // socket fd 10
+          if (nr === 0x62) return pointer(options.elfldrRunning ? 0 : -1); // connect 9021
+          if (nr === 6) return pointer(0); // close
+          if (nr === 24) return pointer(options.jailbroken ? 0 : 1000); // getuid
+          throw new Error('Unexpected syscall: ' + nr);
+        },
+      },
+      executePayload: async (code, payloadArgs) => {
+        executed.push({ code, payloadArgs });
+      },
+    };
+  }
+
+  // Flow A: ELF loader already running on 9021 -> skips exploit and autoload
+  {
+    const api = makeMockApi({ elfldrRunning: true });
+    const run = await runner(api);
+    if (typeof run === 'function') await run(api);
+    assert.equal(api.executed.length, 0, 'Must not execute any sub-payload if elfldr is running');
+    assert(api.logs.some(l => l.msg.includes('ELF loader is already active')));
+  }
+
+  // Flow B: Process is already root / jailbroken -> skips exploit and autoload
+  {
+    const api = makeMockApi({ elfldrRunning: false, jailbroken: true });
+    const run = await runner(api);
+    if (typeof run === 'function') await run(api);
+    assert.equal(api.executed.length, 0, 'Must not execute any sub-payload if already jailbroken');
+    assert(api.logs.some(l => l.msg.includes('Process is already jailbroken')));
+  }
+
+  // Flow C: Neither -> executes chosen exploit, then autoload.js
+  {
+    const api = makeMockApi({ elfldrRunning: false, jailbroken: false });
+    // Mock global fetch for embedded files
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => ({
+      ok: true,
+      text: async () => '// code for ' + url,
+    });
+    try {
+      const run = await runner(api);
+      if (typeof run === 'function') await run(api);
+      assert.equal(api.executed.length, 2, 'Must execute exploit then autoload.js');
+      assert.match(api.executed[0].code, /code for .*?(relapse\.lua|poops\.js)/);
+      if (api.executed[0].code.includes('relapse.lua')) {
+        assert.deepEqual(api.executed[0].payloadArgs, ['compat=remote_lua_loader'],
+          'relapse.lua must be executed with compat=remote_lua_loader');
+      }
+      assert.match(api.executed[1].code, /code for .*?autoload\.js/);
+      assert.equal(api.executed[1].payloadArgs[0], 'custom.elf');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  }
+
+  // 7. Modular AppCache build architecture:
+  const makefile = fs.readFileSync('Makefile', 'utf8');
+  assert(makefile.includes('build/autoloader'),
+    'Makefile must stage the modular autoloader');
+  assert(!makefile.includes('build/autoloader/$$chain.html'),
+    'Makefile should not build separate chain pages');
+
+  const dist = 'frontend/dist/cache.appcache';
+  if (fs.existsSync(dist)) {
+    const manifest = fs.readFileSync(dist, 'utf8');
+    assert(manifest.includes('/index.html'), 'index.html must be cached');
+    assert(!manifest.includes('/poops.html') && !manifest.includes('/relapse.html'),
+      'manifest should not contain obsolete poops.html or relapse.html');
+  }
+
+  // 8. The server holds no selection state and gates manifest per request:
   const httpServer = fs.readFileSync('src/http_server.c', 'utf8');
   for (const gone of ['selected_exploit', 'active_exploit', '# selected exploit']) {
     assert(!httpServer.includes(gone), 'src/http_server.c still references ' + gone);
@@ -222,18 +325,16 @@ const only = fw => {
   assert(!/^static atomic_int .*exploit/m.test(httpServer),
     'the server must not keep a remembered choice');
   for (const present of [
-    // The definition, not just the call site: a call whose helper was never
-    // added is a compile error, and it slipped through once already.
     'static int supported_chains(struct MHD_Connection *conn) {',
     'int poops = fw >= 7 && fw <= 12;',
     'int relapse = fw >= 7 && fw <= 13.60f && fw != 9.05f;',
-    'int cache_allowed = chains != 0 && (single_chain || (requested & chains) != 0);',
+    'int cache_allowed = chains != 0;',
     'if (entry_page && !cache_allowed) {',
   ]) {
     assert(httpServer.includes(present),
       'src/http_server.c should still gate the manifest per request: ' + present);
   }
 
-  console.log('Selection flow passed: picks stored and honoured, no prompt on lone-chain firmware, ' +
-    'both chain pages cached so a switch never invalidates anything.');
+  console.log('Selection flow passed: automatic caching on all supported firmwares, ' +
+    'auto-dispatch in autoloader.js based on FW and network, single standalone index.html page.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

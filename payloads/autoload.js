@@ -32,9 +32,12 @@ async function connect(api) {
 
 async function loadElf(api) {
   const elfName = (api && Array.isArray(api.args) && api.args[0]) || "autoload.elf";
-  const response = await fetch(elfName);
-  if (!response.ok) throw new Error("Could not load " + elfName + ".");
-  const bytes = await response.arrayBuffer();
+  let bytes = api && Array.isArray(api.args) && api.args[1];
+  if (!bytes) {
+    const response = await fetch(elfName);
+    if (!response.ok) throw new Error("Could not load " + elfName + ".");
+    bytes = await response.arrayBuffer();
+  }
   const view = new DataView(bytes);
   if (bytes.byteLength < 0x1000 || view.getUint32(0, true) !== 0x464c457f)
     throw new Error(elfName + " is not an ELF binary.");

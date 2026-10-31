@@ -117,10 +117,9 @@ def compress_entry(data):
 def build_manifest(files, version, build_time, app_dir, pointer_path, marker_path):
     """Cache the app, the stable pointer, then the version marker.
 
-    The cached bytes do not depend on which exploit was chosen: both sources are
-    embedded in the app page, and the choice itself lives in localStorage. So
-    there is nothing per-chain to list, and nothing to invalidate when it
-    changes.
+    The autoloader is packaged as a single unified standalone page in the app
+    directory. Exploit selection is automatic at runtime based on firmware
+    and network status.
     """
     lines = [
         "CACHE MANIFEST",

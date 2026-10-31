@@ -6,20 +6,27 @@
 <p id="status">Loading...</p>
 <script>
 (function () {
-  // Both chain pages are cached, so this pointer only has to pick one. The choice
-  // was recorded by the installer on this same origin, so it is readable here
-  // with no server running.
   var version = '[[VERSION_PLACEHOLDER]]';
   var base = '/app/[[APP_DIR_PLACEHOLDER]]/';
-  var chain = null;
-  try { chain = window.localStorage.getItem('wkal_exploit'); } catch (error) { chain = null; }
-  if (chain !== 'poops' && chain !== 'relapse') {
-    document.getElementById('status').textContent = 'No exploit was chosen. Run the installer again.';
+
+  var match = /PlayStation 5\/(\d+\.\d+)/.exec(navigator.userAgent);
+  var params = typeof location !== 'undefined' && location.search ? new URLSearchParams(location.search) : null;
+  var fwArg = params ? params.get('fw') : null;
+  if (!match && fwArg) {
+    match = ['PlayStation 5/' + fwArg, fwArg];
+  }
+  var fw = match ? parseFloat(match[1]) : 0;
+
+  if (match && (fw < 7.00 || fw > 13.60)) {
+    document.getElementById('status').textContent = 'Unsupported firmware ' + match[1] + '.';
     return;
   }
+
   fetch(base + '__complete__').then(function (r) { return r.text(); }).then(function (marker) {
     if (marker.trim() !== version) throw new Error('Cache incomplete');
-    location.replace(base + chain + '.html');
+    var target = base + 'index.html';
+    if (fwArg) target += '?fw=' + encodeURIComponent(fwArg);
+    location.replace(target);
   }).catch(function () {
     document.getElementById('status').textContent = 'Cache incomplete. Run the installer again.';
   });

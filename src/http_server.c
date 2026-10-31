@@ -94,20 +94,13 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
     struct MHD_Response *resp = NULL;
     int http_status = MHD_HTTP_OK;
     /* Whether this request may start caching. Decided from the request alone --
-     * the query string and the User-Agent -- so nothing is remembered between
-     * requests and nothing can be left stale by a later one. The entry page is
-     * served without its manifest attribute until the user has been given a
-     * choice, because AppCache starts on the attribute and JS runs too late to
-     * stop it. Firmware with only one chain needs no question, so it may cache
-     * immediately. Both chain pages are always cached once it starts, so the
-     * cached bytes do not depend on the choice and never have to be invalidated.
+     * the User-Agent -- so nothing is remembered between requests. The entry page
+     * is served without its manifest attribute on unsupported firmwares, stopping
+     * AppCache before it begins. Supported firmwares cache the autoloader page
+     * immediately without requiring manual user selection.
      */
     int chains = supported_chains(conn);
-    const char *arg = MHD_lookup_connection_value(conn, MHD_GET_ARGUMENT_KIND, "exploit");
-    int requested = arg && strcmp(arg, "poops") == 0 ? 1 :
-                    arg && strcmp(arg, "relapse") == 0 ? 2 : 0;
-    int single_chain = chains == 1 || chains == 2;
-    int cache_allowed = chains != 0 && (single_chain || (requested & chains) != 0);
+    int cache_allowed = chains != 0;
     int entry_page = strcmp(url, ROUTE_INDEX) == 0 || strcmp(url, ROUTE_INDEX_HTML) == 0;
 
     if (strcmp(url, ROUTE_INSTALL) == 0) {
@@ -242,8 +235,8 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
             /* Test simulation hook (no-op unless compiled with SIMULATE=1|2) */
             simulate_corrupt_manifest(url, &payload, &payload_size, &mem_mode);
 
-            /* Removing the manifest attribute is what stops AppCache from starting
-             * before an exploit has been chosen. */
+            /* Removing the manifest attribute stops AppCache from starting
+             * on unsupported firmwares. */
             if (entry_page && !cache_allowed) {
                 char *copy = malloc(payload_size + 64);
                 if (!copy) {

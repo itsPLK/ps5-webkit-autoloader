@@ -11,8 +11,10 @@ function pointer(low) {
 }
 
 (async () => {
-  const { runPayloadQueue } = await import(pathToFileURL(path.resolve(
-    'third_party/ps5-webkit-remote-loader/src/standalone.js')).href);
+  const loaderPath = fs.existsSync('third_party/ps5-webkit-remote-loader/src/standalone.js')
+    ? 'third_party/ps5-webkit-remote-loader/src/standalone.js'
+    : '../../src/standalone.js';
+  const { runPayloadQueue } = await import(pathToFileURL(path.resolve(loaderPath)).href);
 
   async function run(options = {}) {
     const memory = new Map(), calls = [], logs = [];

@@ -1,6 +1,6 @@
 # Native installer plus a standalone PC setup host.
 PYTHON := python3
-LOADER := third_party/ps5-webkit-remote-loader
+LOADER ?= $(if $(wildcard third_party/ps5-webkit-remote-loader/installer/common/common.mk),third_party/ps5-webkit-remote-loader,../..)
 INSTALLER_COMMON := $(LOADER)/installer/common
 include $(INSTALLER_COMMON)/common.mk
 SDK := /opt/ps5-payload-sdk
@@ -24,22 +24,11 @@ ifndef BUILD_TITLE
 BUILD_TITLE := $(shell $(PYTHON) tools/gen_version.py --title)
 endif
 
-BUILDER := $(PYTHON) $(LOADER)/tools/build_standalone.py
-CHAINS := poops relapse
-# One standalone page per chain, carrying elfldr-check.js, the chain's exploit,
-# then autoload.js. The chain sources are unmodified
-# submodule payloads; each exploit prefetches elfldr/kexp itself.
-# Autoloader appearance is embedded through the upstream builder's hooks.
-# Each variable accepts a whitespace-separated list of file paths.
-PAGE_CSS ?= frontend/autoloader/style.css
-PAGE_JS ?= frontend/autoloader/app.js
-PAGE_CONFIG := build/page-config.js
+# Modular autoloader page carrying autoloader.js (unified orchestrator),
+# poops.js, relapse.lua, autoload.js, autoload.elf, and elfldr.elf.
+# All assets are cached individually via AppCache or served via HTTP.
 ELFLDR_TAG ?= $(shell git -C third_party/ps5-elfldr describe --tags --always 2>/dev/null || echo v0.27-b57d0e9)
 ELFLDR_VIRTUAL := shared/elfldr-ps5-$(ELFLDR_TAG).elf
-PAGE_FLAGS := --elfldr $(ELFLDR_VIRTUAL)=build/deps/elfldr.elf \
-              $(foreach file,$(PAGE_CSS),--css "$(file)") \
-              --js "$(PAGE_CONFIG)" \
-              $(foreach file,$(PAGE_JS),--js "$(file)")
 APP_PAGE := build/autoloader/index.html
 HOST_PAGE := build/host/index.html
 STAGE := frontend/dist
@@ -87,27 +76,27 @@ $(INSTALLER_LOGO): assets/icon.svg
 payload-deps:
 	./tools/download_deps.sh
 
-# One page per chain: ELF loader check first, then exploit and autoload. Both
-# are cached, so the choice of chain never has to invalidate anything.
+# Modular autoloader page directory carrying autoloader.js (orchestrator),
+# poops.js, relapse.lua, autoload.js, and payload ELF. Exploit selection
+# is determined dynamically at runtime based on FW and network status.
 page: payload-deps
 	@mkdir -p build/autoloader
-	$(PYTHON) tools/gen_version.py --page-config $(PAGE_CONFIG)
-	@for chain in $(CHAINS); do \
-	    echo "$(BUILDER) payloads/$$chain.js -> build/autoloader/$$chain.html"; \
-	    $(BUILDER) $(CURDIR)/payloads/elfldr-check.js payloads/$$chain.js $(CURDIR)/payloads/autoload.js::$(AUTOLOAD_PAYLOAD_VIRTUAL) \
-	        --title "$(BUILD_TITLE)" $(PAGE_FLAGS) \
-	        --embed $(AUTOLOAD_PAYLOAD_VIRTUAL)=build/deps/autoload.elf \
-	        -o $(CURDIR)/build/autoloader/$$chain.html || exit 1; \
-	done
+	$(PYTHON) tools/build_modular_page.py \
+	    --output-dir build/autoloader \
+	    --loader-dir $(LOADER) \
+	    --title "$(BUILD_TITLE)" \
+	    --version $(BUILD_VERSION) \
+	    --elfldr-name $(notdir $(ELFLDR_VIRTUAL)) \
+	    --elfldr-bin build/deps/elfldr.elf \
+	    --payload-name $(AUTOLOAD_PAYLOAD_VIRTUAL) \
+	    --payload-bin build/deps/autoload.elf
 
 registry: version page $(INSTALLER_LOGO)
 	rm -rf $(STAGE)
 	@mkdir -p $(STAGE)/app/$(BUILD_VERSION)
 	cp frontend/installer-page/index.html $(INSTALLER_LOGO) $(STAGE)/
 	cp frontend/pointer/index.html $(STAGE)/app/index.html
-	@for chain in $(CHAINS); do \
-	    cp build/autoloader/$$chain.html $(STAGE)/app/$(BUILD_VERSION)/$$chain.html || exit 1; \
-	done
+	cp -R build/autoloader/. $(STAGE)/app/$(BUILD_VERSION)/
 	@echo "$(BUILD_VERSION)" > $(STAGE)/VERSION
 	$(PYTHON) tools/gen_file_registry.py $(STAGE) $(word 1,$(REGISTRY)) $(word 2,$(REGISTRY))
 
@@ -115,24 +104,20 @@ $(ELF): registry icons $(SRCS) $(wildcard include/*.h) $(INSTALLER_COMMON_HEADER
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SRCS) include/file_registry.c $(LIBS)
 	$(STRIP) $@
 
-# The setup host embeds the installer ELF. It packages both chains (Relapse as
-# default index.html, Poops as poops.html) so firmwares where Relapse is
-# unsupported (9.05) are automatically routed to Poops.
-HOST_RELAPSE := build/host/relapse.html
-HOST_POOPS := build/host/poops.html
-
+# The setup host embeds the modular autoloader and installer ELF for PC serving.
 host: $(HOST_PAYLOAD) payload-deps assets/icon.ico
 	@mkdir -p build/host
-	$(PYTHON) tools/gen_version.py --page-config $(PAGE_CONFIG)
-	$(BUILDER) $(CURDIR)/payloads/elfldr-check.js payloads/relapse.js $(CURDIR)/payloads/autoload.js::$(HOST_PAYLOAD_VIRTUAL) \
-	    --title "$(BUILD_TITLE)" $(PAGE_FLAGS) \
-	    --embed $(HOST_PAYLOAD_VIRTUAL)=$(HOST_PAYLOAD) -o $(CURDIR)/$(HOST_RELAPSE)
-	$(BUILDER) $(CURDIR)/payloads/elfldr-check.js payloads/poops.js $(CURDIR)/payloads/autoload.js::$(HOST_PAYLOAD_VIRTUAL) \
-	    --title "$(BUILD_TITLE)" $(PAGE_FLAGS) \
-	    --embed $(HOST_PAYLOAD_VIRTUAL)=$(HOST_PAYLOAD) -o $(CURDIR)/$(HOST_POOPS)
+	$(PYTHON) tools/build_modular_page.py \
+	    --output-dir build/host \
+	    --loader-dir $(LOADER) \
+	    --title "$(BUILD_TITLE)" \
+	    --version $(BUILD_VERSION) \
+	    --elfldr-name $(notdir $(ELFLDR_VIRTUAL)) \
+	    --elfldr-bin build/deps/elfldr.elf \
+	    --payload-name $(HOST_PAYLOAD_VIRTUAL) \
+	    --payload-bin $(HOST_PAYLOAD)
 	$(PYTHON) $(LOADER)/tools/build_host.py \
-	    --page index.html=$(HOST_RELAPSE) \
-	    --page poops.html=$(HOST_POOPS) \
+	    --dir build/host \
 	    --version $(BUILD_VERSION) --name "PS5 WEBKIT AUTOLOADER" --output webkit-autoloader-host.py
 
 dev: page
@@ -141,6 +126,5 @@ dev: page
 clean:
 	rm -rf $(STAGE) build/autoloader build/host
 	rm -f $(ELF) $(REGISTRY) include/wkali_version.h webkit-autoloader-host.py
-	rm -f $(PAGE_CONFIG)
 
 .PHONY: all version print-version test test-native icons payload-deps page registry host dev clean

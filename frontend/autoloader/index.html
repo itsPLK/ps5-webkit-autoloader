@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>WebKit Autoloader v[[VERSION_PLACEHOLDER]] by PLK (built [[BUILD_TIME_PLACEHOLDER]])</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="console"></div>
+  <div id="hud">
+    <div id="hud-addr" style="display: none;"></div>
+    <div id="hud-fw">FW --</div>
+  </div>
+
+  <script src="./src/firmware.js"></script>
+  <script src="./src/main.js"></script>
+  <script src="./src/rop.js"></script>
+  <script src="./src/utils/syscalls.js"></script>
+  <script>
+    window.WKAL_PAGE = { version: "[[VERSION_PLACEHOLDER]]", buildTime: "[[BUILD_TIME_PLACEHOLDER]]" };
+    window.LOADER_CONFIG = {
+      ELFLDR_ELF: "shared/[[ELFLDR_FILENAME]]"
+    };
+    window.STANDALONE = {
+      title: "WebKit Autoloader v[[VERSION_PLACEHOLDER]] by PLK (built [[BUILD_TIME_PLACEHOLDER]])",
+      modular: true,
+      payloads: [
+        { name: "autoloader.js", url: "payloads/autoloader.js", args: ["[[PAYLOAD_ELF_FILENAME]]"] }
+      ]
+    };
+  </script>
+  <script src="./app.js"></script>
+  <script type="module" src="./src/site.js"></script>
+</body>
+</html>

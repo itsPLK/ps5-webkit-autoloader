@@ -1,8 +1,9 @@
 // Exercise cache completion, failures, repair and the pointer without a PS5.
 //
-// The installer's two prerequisites are independent -- the AppCache completing
-// and an exploit being chosen -- and may arrive in either order, so both orders
-// and the "one never arrives" cases are covered.
+// The installer automatically caches both exploit pages on supported firmwares
+// without requiring manual user selection. When the cache completes, the homescreen
+// shortcut is installed. The pointer then automatically dispatches to relapse.html
+// or poops.html at runtime based on firmware version and network status.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -12,7 +13,7 @@ function setup(file, options = {}) {
   const code = html.match(/<script>([\s\S]*?)<\/script>/)[1]
     .replaceAll('[[VERSION_PLACEHOLDER]]', 'test-version')
     .replaceAll('[[APP_DIR_PLACEHOLDER]]', 'test-version');
-  const nodes = Object.fromEntries(['status', 'repair', 'choice', 'poops', 'relapse', 'progress', 'percent', 'detail', 'progressBar', 'logContainer',
+  const nodes = Object.fromEntries(['status', 'repair', 'progress', 'percent', 'detail', 'progressBar', 'logContainer',
     'cacheCorruptOverlay', 'cancelRepair', 'repairMessage']
     .map(key => [key, { hidden: true, className: '', textContent: '', style: {}, focus() {},
       setAttribute(key, value) { this[key] = String(value); },
@@ -20,6 +21,8 @@ function setup(file, options = {}) {
   // Seed the text the markup starts with, so a handler that writes nothing is
   // distinguishable from one that writes the expected message.
   nodes.status.textContent = 'Caching content...';
+  nodes.progress.hidden = false;
+  nodes.percent.hidden = false;
   nodes.progress['aria-valuenow'] = '0';
   const requests = [];
   const logRequests = [];
@@ -36,7 +39,10 @@ function setup(file, options = {}) {
       this.getResponseHeader = () => '42';
     },
     document: { getElementById: key => nodes[key] },
-    navigator: { userAgent: options.fw ? 'PlayStation 5/' + options.fw : 'Mozilla/5.0' },
+    navigator: {
+      userAgent: options.fw ? 'PlayStation 5/' + options.fw : (options.ua !== undefined ? options.ua : 'Mozilla/5.0'),
+      onLine: options.onLine !== undefined ? options.onLine : true,
+    },
     localStorage: {
       getItem: key => (saved.has(key) ? saved.get(key) : null),
       setItem: (key, value) => { saved.set(key, value); },
@@ -78,17 +84,14 @@ function setup(file, options = {}) {
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-// The state the installer is in *after* a choice: the page was reloaded with a
-// supported ?exploit=, so there is no prompt and the cache is running. The
-// pre-choice state (prompt up, nothing caching) is covered separately below.
-const dual = options => setup('frontend/installer-page/index.html',
-  { fw: '11.00', search: '?exploit=poops', ...options });
+const runInstaller = options => setup('frontend/installer-page/index.html',
+  { fw: '11.00', ...options });
 
 (async () => {
-  // After the choice, the cache alone is enough to install.
+  // 1. On supported firmware, cache completion is enough to install automatically.
   for (const event of ['cached', 'noupdate', 'updateready']) {
     for (const status of [4, 5]) {
-      const test = dual({ status });
+      const test = runInstaller({ status });
       test.listeners[event]();
       test.listeners[event]();
       await flush();
@@ -105,59 +108,45 @@ const dual = options => setup('frontend/installer-page/index.html',
     }
   }
 
-  // Before the choice, nothing may cache at all: no AppCache handlers are
-  // registered and no request is made, so the progress bar cannot race the
-  // buttons. The server withholds the manifest attribute in this state too.
-  const before = setup('frontend/installer-page/index.html', { fw: '11.00' });
-  assert.equal(before.nodes.choice.hidden, false, 'a bare load must prompt');
-  assert.equal(before.nodes.progress.hidden, true, 'no progress bar behind the prompt');
-  assert.equal(Object.keys(before.listeners).length, 0, 'nothing may cache behind the prompt');
-  assert.deepEqual(before.requests, []);
-  assert.deepEqual(before.logRequests, [], 'no log polling while choosing');
-  // Clicking records the choice and reloads with it; that reload starts the cache.
-  before.nodes.poops.onclick();
-  assert.equal(new URLSearchParams(before.target().split('?')[1]).get('exploit'), 'poops');
-  const after = dual();
-  assert(Object.keys(after.listeners).length > 0, 'the reload must start the cache');
-  assert.equal(after.nodes.choice.hidden, true, 'the reload must not prompt again');
-  assert.equal(after.logRequests[0].path, '/logs?pos=0');
-  after.logRequests[0].status = 200;
-  after.logRequests[0].responseText = '[WKALI] Caching content\n';
-  after.logRequests[0].onload();
-  assert.equal(after.nodes.logContainer.hidden, false);
-  assert.match(after.nodes.logContainer.textContent, /Caching content/);
-
-  // A choice already stored does not suppress the prompt, so switching stays one
-  // tap away -- but the prompt is still what starts the cache, so it names the
-  // current choice rather than silently keeping it.
+  // Successful install clears both pending and legacy exploit keys.
   const rerun = setup('frontend/installer-page/index.html',
-    { fw: '11.00', search: '?exploit=relapse', seed: { wkal_exploit: 'poops' } });
+    { fw: '11.00', seed: { wkal_exploit: 'poops', wkal_pending: 'relapse' } });
   rerun.listeners.cached();
   await flush();
-  assert.equal(rerun.saved.get('wkal_exploit'), 'relapse', 'a finished install must promote it');
   assert.equal(rerun.saved.get('wkal_pending'), undefined, 'pending must be cleared');
+  assert.equal(rerun.saved.get('wkal_exploit'), undefined, 'legacy exploit key must be cleared');
 
-  // A failed install must leave the previous one intact and usable.
-  const failed = setup('frontend/installer-page/index.html',
-    { fw: '11.00', search: '?exploit=relapse', seed: { wkal_exploit: 'poops' }, requestFails: true });
+  // 2. On bare load, caching starts immediately without user prompt or clicks.
+  const bare = setup('frontend/installer-page/index.html', { fw: '11.00' });
+  assert(Object.keys(bare.listeners).length > 0, 'caching must start immediately on supported firmware');
+  assert.equal(bare.nodes.progress.hidden, false);
+  assert.equal(bare.logRequests[0].path, '/logs?pos=0');
+  bare.logRequests[0].status = 200;
+  bare.logRequests[0].responseText = '[WKALI] Caching content\n';
+  bare.logRequests[0].onload();
+  assert.equal(bare.nodes.logContainer.hidden, false);
+  assert.match(bare.nodes.logContainer.textContent, /Caching content/);
+
+  // 3. Unsupported firmware refuses outright and signals /exit to the server
+  const unsupported = setup('frontend/installer-page/index.html', { fw: '5.50' });
+  assert.match(unsupported.nodes.status.textContent, /Unsupported/);
+  assert.equal(Object.keys(unsupported.listeners).length, 0, 'unsupported firmware must not start caching');
+  assert(unsupported.requests.includes('/exit'), 'unsupported firmware must signal /exit');
+
+  // Desktop preview testing via ?fw= parameter:
+  const desktopUnsupported = setup('frontend/installer-page/index.html', { ua: 'Mozilla/5.0', search: '?fw=5.50' });
+  assert.match(desktopUnsupported.nodes.status.textContent, /Unsupported/);
+  assert.equal(Object.keys(desktopUnsupported.listeners).length, 0);
+  assert(desktopUnsupported.requests.includes('/exit'));
+
+  // 4. Failed install reports error and offers repair.
+  const failed = runInstaller({ requestFails: true });
   failed.listeners.cached();
   await flush();
-  assert.equal(failed.saved.get('wkal_exploit'), 'poops',
-    'a failed install must not clear or replace the installed chain');
   assert.equal(failed.nodes.repair.hidden, false);
 
-  // ...and an installed choice never suppresses the prompt.
-  const asked = setup('frontend/installer-page/index.html',
-    { fw: '11.00', seed: { wkal_exploit: 'relapse' } });
-  assert.equal(asked.nodes.choice.hidden, false, 'an installed choice must not suppress the prompt');
-  assert.match(asked.nodes.detail.textContent, /Currently installed: relapse/);
-  asked.nodes.poops.onclick();
-  assert.equal(asked.saved.get('wkal_pending'), 'poops');
-  assert.equal(asked.saved.get('wkal_exploit'), 'relapse',
-    'choosing must not disturb the installed chain until the install finishes');
-
-  // Progress is reported, and never claims 100% before the cache is complete.
-  const meter = dual();
+  // 5. Progress is reported, and never claims 100% before the cache is complete.
+  const meter = runInstaller();
   meter.listeners.progress({ loaded: 1, total: 4 });
   assert.equal(meter.nodes.progress['aria-valuenow'], '25');
   assert.equal(meter.nodes.progressBar.style.transform, 'scaleX(0.25)');
@@ -174,20 +163,19 @@ const dual = options => setup('frontend/installer-page/index.html',
   assert.equal(meter.nodes.progress.className, 'success');
   assert.equal(meter.nodes.percent.textContent, '100%');
 
-  // A download that finishes but whose marker does not match is a real failure.
+  // 6. A download that finishes but whose marker does not match is a real failure.
   for (const options of [{ incomplete: true }, { requestFails: true }]) {
-    const test = dual(options);
+    const test = runInstaller(options);
     test.listeners.downloading();
     test.listeners.cached();
-    test.nodes.poops.onclick();
     await flush();
     assert.equal(test.nodes.repair.hidden, false, 'a bad marker must offer repair');
     if (options.incomplete) assert(!test.requests.includes('/install'));
   }
 
-  // An error during a download is corruption; one during the check is not, and
-  // neither may be silent. This is the v0.5.1 behaviour.
-  const during = dual();
+  // 7. An error during a download is corruption; one during the check is not, and
+  // neither may be silent.
+  const during = runInstaller();
   during.listeners.downloading();
   during.listeners.error();
   assert.equal(during.nodes.repair.hidden, false, 'a download failure must offer repair');
@@ -200,11 +188,10 @@ const dual = options => setup('frontend/installer-page/index.html',
 
   for (const event of ['error', 'obsolete']) {
     for (const phase of ['before', 'after']) {
-      const quiet = dual();
+      const quiet = runInstaller();
       if (phase === 'after') {
         quiet.listeners.downloading();
         quiet.listeners.cached();
-        quiet.nodes.poops.onclick();
         await flush();
         assert.match(quiet.nodes.status.textContent, /Installed/);
       }
@@ -221,14 +208,14 @@ const dual = options => setup('frontend/installer-page/index.html',
     }
   }
 
-  // Repair is offered but does nothing until confirmed.
-  const silent = dual();
+  // 8. Repair is offered but does nothing until confirmed.
+  const silent = runInstaller();
   silent.listeners.error();
   silent.nodes.repair.onclick();
   await flush();
   assert.equal(silent.requests.length, 0, 'Repair requires confirmation');
 
-  const repair = dual({ confirm: true });
+  const repair = runInstaller({ confirm: true });
   repair.listeners.downloading();
   repair.listeners.error();
   repair.nodes.repair.onclick();
@@ -236,22 +223,33 @@ const dual = options => setup('frontend/installer-page/index.html',
   assert.deepEqual(repair.requests, ['/clear-webkit-data']);
   assert.match(repair.nodes.status.textContent, /cleared/);
 
-  // Without AppCache there is nothing to do and nothing is requested.
-  const absent = dual({ noCache: true });
+  // 9. Without AppCache there is nothing to do and nothing is requested.
+  const absent = runInstaller({ noCache: true });
   assert.equal(absent.requests.length, 0);
   assert.match(absent.nodes.status.textContent, /does not support/);
 
-  // The pointer redirects only on a complete cache and a recorded choice.
+  // 10. The pointer redirects only on a complete cache to the unified index.html.
   for (const incomplete of [false, true]) {
-    const pointer = setup('frontend/pointer/index.html', { incomplete, seed: { wkal_exploit: 'poops' } });
+    const pointer = setup('frontend/pointer/index.html', { incomplete, fw: '11.00', onLine: true });
     await flush();
-    assert.equal(pointer.target(), incomplete ? undefined : '/app/test-version/poops.html');
+    assert.equal(pointer.target(), incomplete ? undefined : '/app/test-version/index.html');
     if (incomplete) assert.match(pointer.nodes.status.textContent, /incomplete/);
   }
-  const unchosen = setup('frontend/pointer/index.html', {});
-  await flush();
-  assert.equal(unchosen.target(), undefined, 'no choice means no redirect');
-  assert.match(unchosen.nodes.status.textContent, /installer again/);
 
-  console.log('Installer checks passed: cache events, marker, choice gating, errors, repair and pointer.');
+  const pUnsupported = setup('frontend/pointer/index.html', { fw: '5.50' });
+  await flush();
+  assert.equal(pUnsupported.target(), undefined);
+  assert.match(pUnsupported.nodes.status.textContent, /Unsupported/);
+
+  // Desktop preview testing via ?fw= query parameter:
+  const pDesk = setup('frontend/pointer/index.html', { ua: 'Mozilla/5.0', search: '?fw=11.00' });
+  await flush();
+  assert.equal(pDesk.target(), '/app/test-version/index.html?fw=11.00', '?fw=11.00 desktop preserves fw parameter');
+
+  const pDeskUnsupported = setup('frontend/pointer/index.html', { ua: 'Mozilla/5.0', search: '?fw=5.50' });
+  await flush();
+  assert.equal(pDeskUnsupported.target(), undefined, '?fw=5.50 desktop must not redirect');
+  assert.match(pDeskUnsupported.nodes.status.textContent, /Unsupported/);
+
+  console.log('Installer checks passed: cache events, marker, automatic caching, errors, repair and pointer.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
