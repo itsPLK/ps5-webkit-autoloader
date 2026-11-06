@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.7.0] - 2026-11-06
+
+Most of this release is changes in [ps5-webkit-remote-loader](https://github.com/itsPLK/ps5-webkit-remote-loader), the shared base this project builds on. Main changes:
+
+* **Switched Relapse to [notmaj0r](https://github.com/notmaj0r)'s [Lua implementation](https://github.com/notmaj0r/remote_lua_loader)**: Adapted to run through the remote loader's new Lua runtime (LuaK1t)
+* **Fixed freezes/hangs during loading**: Resolved several causes of the loader hanging or freezing mid-load in the shared exploit runner.
+* **Modular AppCache loading**: Replaced the monolithic single-file HTML bundle (with payloads inlined as base64) with a modular architecture staged into AppCache, cutting build artifact sizes substantially (`host.py` ~11.9MB → ~3.7MB, installer `.elf` ~3.9MB → ~2.1MB).
+* **Automatic exploit selection**: Automatically selects the best exploit based on firmware version and network status:
+  - **FW > 12.00 and FW <= 13.60**: Relapse (Poops does not support > 12.00)
+  - **FW == 9.05**: Poops (Relapse does not support 9.05)
+  - **Active network connection**: Relapse
+  - **Offline (FW <= 12.00)**: Poops (works without active network connection)
+
+### Dependencies
+* Updated [ps5-webkit-remote-loader](https://github.com/itsPLK/ps5-webkit-remote-loader) to v0.2.0
+* Updated [ps5-unified-autoloader](https://github.com/itsPLK/ps5-unified-autoloader) to v0.1.7
+
 ## [v0.6.2] - 2026-10-28
 
 - Updated [ps5-unified-autoloader](https://github.com/itsPLK/ps5-unified-autoloader) to v0.1.6

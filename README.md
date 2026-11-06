@@ -120,6 +120,7 @@ a local page preview. See [ARCHITECTURE.md](ARCHITECTURE.md) for the build and c
 
 * **[jordyidk](https://github.com/jordyidk)** & contributors — [slopkit (Poops)](https://github.com/jordyidk/slopkit)
 * **[soniciso1](https://github.com/soniciso1)**, **[ntfargo](https://github.com/ntfargo)** & contributors — [Relapse](https://github.com/soniciso1/relapse)
+* **[notmaj0r](https://github.com/notmaj0r)** — [Lua port of Relapse](https://github.com/notmaj0r/remote_lua_loader)
 * **[john-tornblom](https://github.com/john-tornblom)** — [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk/) and [elfldr](https://github.com/ps5-payload-dev/elfldr)
 * See [ps5-webkit-remote-loader](https://github.com/itsPLK/ps5-webkit-remote-loader) for runtime and toolchain credits.
 * Everyone else contributing to the PS5 homebrew scene.
