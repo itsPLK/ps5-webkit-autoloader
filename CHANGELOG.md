@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.7.1] - 2026-11-08
+
+* **Fixed Poops stability**: A stability fix for Relapse in v0.7.0 was unintentionally affecting Poops, causing slower runs and more kernel panics.
+* **Cleaned up Poops logging**: Poops now shows cleaner, less noisy output.
+
+### Dependencies
+* Updated [ps5-webkit-remote-loader](https://github.com/itsPLK/ps5-webkit-remote-loader) to v0.2.2
+
 ## [v0.7.0] - 2026-11-06
 
 Most of this release is changes in [ps5-webkit-remote-loader](https://github.com/itsPLK/ps5-webkit-remote-loader), the shared base this project builds on. Main changes:
