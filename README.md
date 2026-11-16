@@ -3,7 +3,7 @@
 </p>
 <h1 align="center">PS5 WebKit Autoloader</h1>
 &nbsp;
-<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>7.00&ndash;13.60</b>.</p>
+<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>6.00&ndash;13.60</b>.</p>
 
 <p align="center">
     <b>Other Autoloaders:</b><br>
@@ -111,16 +111,17 @@ etaHEN.elf
 
 If you want to create or test your own WebKit payloads, check out [ps5-webkit-remote-loader](https://github.com/itsPLK/ps5-webkit-remote-loader), which this project is based on. It lets you send and run JavaScript payloads directly over the network on port 9027.
 
-Build both release artifacts with `./build_release.sh` (Docker required). The build
-uses remote-loader's standalone HTML and host builders directly. Run `make test` for
-the offline checks (payload, installer, and exploit-selection flow) and `make dev` for
-a local page preview. See [ARCHITECTURE.md](ARCHITECTURE.md) for the build and cache layout.
+Build both release artifacts with `./build_release.sh` (Docker required). The modular
+page uses remote-loader's vendored Wobkot userland with Relapse and Poops.
+`autoloader.js` remains the first payload and owns exploit selection; `autoload.js`
+is executed last, after the selected exploit has started elfldr. Run `make test` for the offline
+checks and `make dev` for a local preview. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Credits
 
+* **[ufm42](https://github.com/ufm42)** — [Wobkot](https://github.com/ufm42/wobkot), the active userland, ROP, and Relapse base
 * **[jordyidk](https://github.com/jordyidk)** & contributors — [slopkit (Poops)](https://github.com/jordyidk/slopkit)
 * **[soniciso1](https://github.com/soniciso1)**, **[ntfargo](https://github.com/ntfargo)** & contributors — [Relapse](https://github.com/soniciso1/relapse)
-* **[notmaj0r](https://github.com/notmaj0r)** — [Lua port of Relapse](https://github.com/notmaj0r/remote_lua_loader)
 * **[john-tornblom](https://github.com/john-tornblom)** — [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk/) and [elfldr](https://github.com/ps5-payload-dev/elfldr)
 * See [ps5-webkit-remote-loader](https://github.com/itsPLK/ps5-webkit-remote-loader) for runtime and toolchain credits.
 * Everyone else contributing to the PS5 homebrew scene.

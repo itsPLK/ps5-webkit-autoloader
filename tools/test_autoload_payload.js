@@ -1,9 +1,6 @@
-// Offline checks for the third payload: stage the ELF, hand it to elfldr.
-//
-// payloads/autoload.js runs as payload 3 of 3, after the chain exploit has run
-// and published api.krw, so there is no chain selection here to test: the page
-// is already built for one chain. What is left is a syscall against a socket and
-// a copy into a mapping, all of which can be driven from here with a fake api.
+// Offline checks for the final payload: stage the ELF and hand it to elfldr.
+// The selected exploit starts elfldr directly, so this payload does not require a
+// separately published api.krw handle.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -27,9 +24,6 @@ async function run(options = {}) {
   let unmapped = 0;
   const expectedElf = (options.args && options.args[0]) || 'autoload.elf';
   const api = {
-    // Payload 3: the exploit already ran, so krw is present unless we are
-    // testing the case where it did not.
-    krw: options.noKrw ? null : {},
     args: options.args || [],
     log: async () => {},
     p: {
@@ -50,7 +44,6 @@ async function run(options = {}) {
       if (n === 0x1dd) { events.push('map'); return pointer(options.mmapFails ? -1 : mapped.low); }
       if (n === 0x49) { unmapped++; return pointer(0); }
       if (n === 4) {
-        assert(api.krw, 'the payload must not send an ELF without kernel access');
         if (options.writeFails) return pointer(-1);
         const count = Math.min(c, 113); // Exercise short writes and the final tail.
         for (let i = 0; i < count; i++) sent.push(memory.get(b.low + i));
@@ -94,10 +87,8 @@ async function run(options = {}) {
   assert.deepEqual(custom.sent, [...custom.bytes]);
   assert.deepEqual(custom.events, ['ps5-unified-autoloader-v0.1.6-e7093cd.elf', 'map']);
 
-  // No kernel access means nothing is sent at all, and nothing is mapped.
-  for (const options of [
-    { noKrw: true }, { fetchFails: true }, { badElf: true }, { mmapFails: true },
-  ]) {
+  // Input and mapping failures send nothing.
+  for (const options of [{ fetchFails: true }, { badElf: true }, { mmapFails: true }]) {
     const result = await run(options);
     assert(result.error, 'expected a failure for ' + JSON.stringify(options));
     assert.equal(result.sent.length, 0);

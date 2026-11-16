@@ -74,15 +74,14 @@
     if (/Autoload: sent \d+ bytes/.test(text)) {
       sent = true;
       update(98, 'Finishing autoload...');
-    } else if (/\[3\/3\].*autoload\.js/.test(text)) update(95, 'Loading autoload payload...');
-    else if (/payloads loaded|elfldr.*listening/i.test(text)) update(90, 'ELF loader ready...');
-    else if (/privileges ready/i.test(text)) update(80, 'Privileges ready...');
-    else if (/read and write ready/i.test(text)) update(65, 'Kernel read/write ready...');
-    else if (/Starting kernel exploit|\[2\/3\]/i.test(text)) update(40, 'Starting kernel exploit...');
-    else if (/\[1\/3\].*elfldr-check\.js/.test(text)) update(35, 'Checking ELF loader...');
-    else if (/Worker chain: ready/i.test(text)) update(30, 'WebKit ready...');
-    else if (/ARW ready/i.test(text)) update(20, 'Preparing WebKit...');
-    else if (/Starting WebKit exploit/i.test(text)) update(10, 'Starting WebKit exploit...');
+    } else if (/Staging and sending|Autoload: staging/i.test(text)) update(95, 'Loading autoload payload...');
+    else if (/Wobkot Relapse completed|Created bin thread|kernel exploit complete, we are root/i.test(text)) update(90, 'ELF loader ready...');
+    else if (/Achieved jailbreak|ps9_stage4.*PASS/i.test(text)) update(80, 'Privileges ready...');
+    else if (/Achieved (?:unrestricted kernel RW|kernel ARW)|ps8_stage3.*PASS/i.test(text)) update(65, 'Kernel read/write ready...');
+    else if (/Wobkot Relapse|===RELAPSE===|kernel exploit starting|selected .*poops/i.test(text)) update(40, 'Starting kernel exploit...');
+    else if (/Wobkot userland ready|Achieved ROP/i.test(text)) update(30, 'WebKit ready...');
+    else if (/Achieved ARW/i.test(text)) update(20, 'Preparing WebKit...');
+    else if (/Starting Wobkot userland/i.test(text)) update(10, 'Starting WebKit exploit...');
     else {
       var stage = /\bSTAGE\s*([0-5])\b/i.exec(text);
       if (stage) update(40 + Number(stage[1]) * 10, 'Running kernel exploit...');

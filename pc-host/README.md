@@ -2,9 +2,9 @@
 
 The setup host is built by remote-loader's `tools/build_host.py`; this
 repository does not maintain a separate DNS/HTTPS implementation. The generated
-`webkit-autoloader-host_v<version>.py` embeds standalone HTML pages for both chains
-(Relapse and Poops) carrying the installer ELF and a TLS certificate. At runtime, it
-automatically routes firmwares where Relapse is unsupported (9.05) to Poops.
+`webkit-autoloader-host_v<version>.py` embeds the Wobkot-based modular page carrying
+the installer ELF and a TLS certificate. The selection orchestrator automatically
+chooses Wobkot Relapse or Poops from firmware and network status.
 It needs only Python's standard library.
 
 Run the generated script, set the PS5's DNS to your PC's IP, then open Settings →

@@ -1,6 +1,5 @@
-// Third payload in each chain page. The exploit runs second and brings up elfldr
-// on port 9021, so this only has to stage the ELF and hand it over. No chain
-// selection happens here: the page is already built for one chain.
+// Final payload. The selection orchestrator runs first and the selected exploit
+// brings up elfldr on port 9021 before this stages and sends the configured ELF.
 //
 // Resources are embedded by remote-loader's builder, so the fetch below is
 // served from the page itself and still works after the exploit has taken the
@@ -59,10 +58,6 @@ async function loadElf(api) {
 }
 
 return async function (api) {
-  // Payload three of three, so the exploit has already run. If it did not publish
-  // kernel access then nothing was achieved and no ELF should be sent.
-  if (!api.krw) throw new Error("The exploit did not complete; no ELF was sent.");
-
   const elf = await loadElf(api);
   await api.log("Autoload: staging " + elf.name + " (" + elf.size + " bytes)...", "info");
   let fd = -1;

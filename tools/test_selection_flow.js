@@ -2,25 +2,16 @@
 // payloads/autoloader.js as a unified orchestrator. At runtime:
 //   1. It probes 127.0.0.1:9021 for an active ELF loader.
 //   2. It probes if the process is already jailbroken (uid 0).
-//   3. If exploit is needed, it auto-dispatches based on FW and network:
-//      - FW > 12.00 and FW <= 13.60 -> relapse.lua
-//      - FW == 9.05 -> poops.js
-//      - Active network connection (navigator.onLine) -> relapse.lua
-//      - Otherwise (offline, FW <= 12.00) -> poops.js
-//   4. It dynamically executes the chosen exploit via api.executePayload().
+//   3. If exploitation is needed, it selects Wobkot Relapse or Poops from
+//      firmware and network status.
+//   4. It dynamically executes the selected exploit via api.executePayload().
 //   5. It dynamically executes autoload.js to stream autoload.elf to elfldr.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const FW = [
-  // fw,      poops, relapse  (as computed by the firmware checks)
-  ['7.00', true, true], ['7.61', true, true], ['8.60', true, true],
-  ['9.00', true, true], ['9.05', true, false], ['9.60', true, true],
-  ['10.01', true, true], ['11.00', true, true], ['11.40', true, true],
-  ['12.00', true, true], ['12.02', false, true], ['12.70', false, true],
-  ['13.00', false, true], ['13.60', false, true],
-];
+const FW = ['6.00', '6.72', '7.00', '7.61', '8.60', '9.00', '9.05', '9.60',
+  '10.01', '11.00', '11.40', '12.00', '12.02', '12.70', '13.00', '13.60'];
 
 /* ---- installer page: frontend/installer-page/index.html ------------------- */
 
@@ -131,9 +122,9 @@ function testSelectExploit(options) {
 }
 
 (async () => {
-  // 1. All supported firmwares start caching immediately on bare load without
+  // 1. All Wobkot-supported firmwares start caching immediately on bare load without
   //    requiring user interaction or manual selection.
-  for (const [fw] of FW) {
+  for (const fw of FW) {
     const page = loadPage({ fw });
     assert(Object.keys(page.listeners).length > 0,
       fw + ': caching must start immediately without user intervention');
@@ -142,7 +133,7 @@ function testSelectExploit(options) {
   }
 
   // 2. Unsupported firmware refuses outright and signals /exit to the server.
-  for (const deadFw of ['5.50', '6.72', '14.00']) {
+  for (const deadFw of ['5.50', '14.00']) {
     const dead = loadPage({ fw: deadFw });
     assert.match(dead.nodes.status.textContent, /Unsupported/);
     assert.equal(Object.keys(dead.listeners).length, 0, deadFw + ': unsupported firmware must not cache');
@@ -172,7 +163,7 @@ function testSelectExploit(options) {
   await flush();
   assert.equal(pDeskFw.target(), '/app/test-version/index.html?fw=9.05');
 
-  for (const badFw of ['5.50', '6.72', '14.00']) {
+  for (const badFw of ['5.50', '14.00']) {
     const bad = loadPointer({ fw: badFw });
     await flush();
     assert.equal(bad.target(), undefined, badFw + ' must not redirect');
@@ -184,44 +175,44 @@ function testSelectExploit(options) {
   assert.equal(incomplete.target(), undefined, 'Incomplete cache must not redirect');
   assert.match(incomplete.nodes.status.textContent, /incomplete/);
 
-  // 5. Automatic exploit dispatch logic in payloads/autoloader.js:
-  //    Rule 1: FW > 12.00 and FW <= 13.60 -> relapse.lua (both online and offline)
+  // 5. Automatic exploit dispatch mirrors the pre-Wobkot policy.
   for (const fw of ['12.02', '12.70', '13.00', '13.60']) {
     for (const onLine of [true, false]) {
       const choice = testSelectExploit({ fw, onLine });
-      assert(choice.file.endsWith('relapse.lua'), fw + ' (onLine: ' + onLine + ') must choose relapse.lua');
-      assert.deepEqual([...choice.args], ['compat=remote_lua_loader'], 'relapse.lua must receive compat=remote_lua_loader');
+      assert(choice.file.endsWith('relapse.js'), fw + ' must choose Wobkot Relapse');
+      assert.deepEqual([...choice.args], []);
     }
   }
 
-  //    Rule 2: FW == 9.05 -> poops.js (both online and offline)
+  for (const fw of ['6.00', '6.72']) {
+    for (const onLine of [true, false]) {
+      const choice = testSelectExploit({ fw, onLine });
+      assert(choice.file.endsWith('relapse.js'), fw + ' has no Poops profile');
+    }
+  }
+
   for (const onLine of [true, false]) {
     const choice = testSelectExploit({ fw: '9.05', onLine });
-    assert(choice.file.endsWith('poops.js'), '9.05 (onLine: ' + onLine + ') must choose poops.js');
-    assert.deepEqual([...choice.args], [], 'poops.js does not need compat args');
+    assert(choice.file.endsWith('poops.js'), '9.05 must choose Poops');
+    assert.deepEqual([...choice.args], []);
   }
 
-  //    Rule 3 & 4: Dual-supported firmwares (7.00 - 12.00 except 9.05):
-  //    Online -> relapse.lua (faster, reliable)
-  //    Offline -> poops.js (works without network)
-  for (const fw of ['7.00', '7.61', '8.60', '9.00', '9.60', '10.01', '11.00', '11.40', '12.00']) {
-    const choiceOnline = testSelectExploit({ fw, onLine: true });
-    assert(choiceOnline.file.endsWith('relapse.lua'), fw + ' online must choose relapse.lua');
-    assert.deepEqual([...choiceOnline.args], ['compat=remote_lua_loader'], 'online relapse.lua must receive compat=remote_lua_loader');
-
-    const choiceOffline = testSelectExploit({ fw, onLine: false });
-    assert(choiceOffline.file.endsWith('poops.js'), fw + ' offline must choose poops.js');
-    assert.deepEqual([...choiceOffline.args], [], 'offline poops.js does not need compat args');
+  for (const fw of ['7.00', '7.61', '8.60', '9.00', '9.60', '10.01', '11.00',
+                    '11.40', '12.00']) {
+    const online = testSelectExploit({ fw, onLine: true });
+    assert(online.file.endsWith('relapse.js'), fw + ' online must choose Relapse');
+    const offline = testSelectExploit({ fw, onLine: false });
+    assert(offline.file.endsWith('poops.js'), fw + ' offline must choose Poops');
   }
 
-  //    Desktop query param ?fw= selection:
+  // Desktop query parameters follow the same firmware rules.
   const desk905 = testSelectExploit({ ua: 'Mozilla/5.0', search: '?fw=9.05', onLine: true });
   assert(desk905.file.endsWith('poops.js'));
   assert.deepEqual([...desk905.args], []);
 
   const desk1300 = testSelectExploit({ ua: 'Mozilla/5.0', search: '?fw=13.00', onLine: false });
-  assert(desk1300.file.endsWith('relapse.lua'));
-  assert.deepEqual([...desk1300.args], ['compat=remote_lua_loader']);
+  assert(desk1300.file.endsWith('relapse.js'));
+  assert.deepEqual([...desk1300.args], []);
 
   // 6. Test the orchestrator execution flow in payloads/autoloader.js
   const AsyncFunction = (async function () {}).constructor;
@@ -255,6 +246,7 @@ function testSelectExploit(options) {
       },
       executePayload: async (code, payloadArgs) => {
         executed.push({ code, payloadArgs });
+        return { failed: !!options.exploitFails && executed.length === 1 };
       },
     };
   }
@@ -277,8 +269,11 @@ function testSelectExploit(options) {
     assert(api.logs.some(l => l.msg.includes('Process is already jailbroken')));
   }
 
-  // Flow C: Neither -> executes chosen exploit, then autoload.js
-  {
+  // Flow C: Neither -> executes the selected exploit, then autoload.js.
+  for (const selection of [
+    { fw: '11.00', onLine: true, exploit: /relapse\.js/ },
+    { fw: '11.00', onLine: false, exploit: /poops\.js/ },
+  ]) {
     const api = makeMockApi({ elfldrRunning: false, jailbroken: false });
     // Mock global fetch for embedded files
     const origFetch = globalThis.fetch;
@@ -286,19 +281,44 @@ function testSelectExploit(options) {
       ok: true,
       text: async () => '// code for ' + url,
     });
+    const oldUA = globalThis.navigator;
+    const oldLocation = globalThis.location;
     try {
+      Object.defineProperty(globalThis, 'navigator', {
+        value: { userAgent: 'PlayStation 5/' + selection.fw, onLine: selection.onLine },
+        configurable: true,
+      });
+      globalThis.location = { search: '' };
       const run = await runner(api);
       if (typeof run === 'function') await run(api);
       assert.equal(api.executed.length, 2, 'Must execute exploit then autoload.js');
-      assert.match(api.executed[0].code, /code for .*?(relapse\.lua|poops\.js)/);
-      if (api.executed[0].code.includes('relapse.lua')) {
-        assert.deepEqual(api.executed[0].payloadArgs, ['compat=remote_lua_loader'],
-          'relapse.lua must be executed with compat=remote_lua_loader');
-      }
+      assert.match(api.executed[0].code, selection.exploit);
+      assert.deepEqual(api.executed[0].payloadArgs, []);
       assert.match(api.executed[1].code, /code for .*?autoload\.js/);
       assert.equal(api.executed[1].payloadArgs[0], 'custom.elf');
     } finally {
       globalThis.fetch = origFetch;
+      if (oldUA === undefined) delete globalThis.navigator;
+      else Object.defineProperty(globalThis, 'navigator', {
+        value: oldUA, configurable: true,
+      });
+      if (oldLocation === undefined) delete globalThis.location;
+      else globalThis.location = oldLocation;
+    }
+  }
+
+  // A failed kernel exploit must leave autoload.js last and unexecuted.
+  {
+    const api = makeMockApi({ elfldrRunning: false, jailbroken: false, exploitFails: true });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async url => ({ ok: true, text: async () => '// code for ' + url });
+    try {
+      const run = await runner(api);
+      if (typeof run === 'function') await assert.rejects(run(api), /failed; refusing/);
+      assert.equal(api.executed.length, 1);
+      assert.match(api.executed[0].code, /relapse\.js/);
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   }
 
@@ -309,13 +329,8 @@ function testSelectExploit(options) {
   assert(!makefile.includes('build/autoloader/$$chain.html'),
     'Makefile should not build separate chain pages');
 
-  const dist = 'frontend/dist/cache.appcache';
-  if (fs.existsSync(dist)) {
-    const manifest = fs.readFileSync(dist, 'utf8');
-    assert(manifest.includes('/index.html'), 'index.html must be cached');
-    assert(!manifest.includes('/poops.html') && !manifest.includes('/relapse.html'),
-      'manifest should not contain obsolete poops.html or relapse.html');
-  }
+  // Generated frontend/dist may belong to an older build. The modular staging
+  // test constructs a clean tree and verifies both active exploit assets.
 
   // 8. The server holds no selection state and gates manifest per request:
   const httpServer = fs.readFileSync('src/http_server.c', 'utf8');
@@ -325,16 +340,15 @@ function testSelectExploit(options) {
   assert(!/^static atomic_int .*exploit/m.test(httpServer),
     'the server must not keep a remembered choice');
   for (const present of [
-    'static int supported_chains(struct MHD_Connection *conn) {',
-    'int poops = fw >= 7 && fw <= 12;',
-    'int relapse = fw >= 7 && fw <= 13.60f && fw != 9.05f;',
-    'int cache_allowed = chains != 0;',
+    'static int firmware_supported(struct MHD_Connection *conn) {',
+    'return fw >= 6.00f && fw <= 13.60f;',
+    'int cache_allowed = firmware_supported(conn);',
     'if (entry_page && !cache_allowed) {',
   ]) {
     assert(httpServer.includes(present),
       'src/http_server.c should still gate the manifest per request: ' + present);
   }
 
-  console.log('Selection flow passed: automatic caching on all supported firmwares, ' +
-    'auto-dispatch in autoloader.js based on FW and network, single standalone index.html page.');
+  console.log('Selection flow passed: firmware/network auto-dispatch, ' +
+    'orchestrator-first/autoload-last execution, and one modular index page.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

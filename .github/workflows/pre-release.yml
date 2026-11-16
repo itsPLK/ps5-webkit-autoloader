@@ -30,7 +30,7 @@ jobs:
         with:
           ref: ${{ inputs.branch }}
           fetch-depth: 0
-          submodules: true
+          submodules: recursive
 
       - name: Extract Version
         id: version

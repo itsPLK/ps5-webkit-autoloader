@@ -1,9 +1,8 @@
 // Exercise cache completion, failures, repair and the pointer without a PS5.
 //
-// The installer automatically caches both exploit pages on supported firmwares
-// without requiring manual user selection. When the cache completes, the homescreen
-// shortcut is installed. The pointer then automatically dispatches to relapse.html
-// or poops.html at runtime based on firmware version and network status.
+// The installer automatically caches the Wobkot page on supported firmwares.
+// When the cache completes, the homescreen shortcut is installed and the pointer
+// routes to the single modular page.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');

@@ -6,19 +6,25 @@ served normally via HTTP or cached individually via AppCache:
   - index.html (lightweight entry page from frontend/autoloader/index.html)
   - style.css, app.js
   - src/ (runtime scripts from remote-loader)
-  - offsets/ (firmware offset files)
+  - vendor/wobkot/ (Wobkot firmware implementation and deferred kernel scripts)
+  - offsets/ and the private ROP worker used only when Poops is selected
   - shared/ (shellcode and elfldr daemon)
-  - payloads/ (autoloader orchestrator, poops.js, relapse.lua, autoload.js)
+  - payloads/ (autoloader orchestrator, Poops, Wobkot Relapse, autoload.js)
   - <target>.elf (payload binary)
 """
 
 import argparse
 import os
 import shutil
-import subprocess
 import sys
 
 from gen_version import get_version_info
+
+
+RETIRED_RUNTIME_FILES = (
+    "firmware.js", "rop.js", "webkit.js", "socket_test.js",
+    "lua-vm.js", "utils/mem.js", "utils/syscalls.js",
+)
 
 
 def copy_tree(src, dst):
@@ -33,6 +39,14 @@ def copy_tree(src, dst):
             dst_file = os.path.join(dst, rel)
             os.makedirs(os.path.dirname(dst_file), exist_ok=True)
             shutil.copy2(src_file, dst_file)
+
+
+def copy_file_tree(root, dst, relatives):
+    for relative in relatives:
+        source = os.path.join(root, relative)
+        target = os.path.join(dst, relative)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        shutil.copy2(source, target)
 
 
 def main():
@@ -52,41 +66,64 @@ def main():
     output_dir = os.path.abspath(args.output_dir)
     loader_dir = os.path.abspath(args.loader_dir)
 
+    wobkot_userland = os.path.join(loader_dir, "vendor", "wobkot", "src", "userland.js")
+    if not os.path.isfile(wobkot_userland):
+        raise SystemExit(
+            "remote-loader's Wobkot submodule is not initialized; run: "
+            "git submodule update --init --recursive"
+        )
+
     version_info = get_version_info()
     version = args.version or version_info["full"]
     build_time = args.build_time or version_info["build_time"]
 
-    # Ensure lua runtime in remote-loader is compiled
-    runtime_builder = os.path.join(loader_dir, "tools", "lua_runtime", "build_runtime.py")
-    if os.path.exists(runtime_builder):
-        subprocess.run([sys.executable, runtime_builder], cwd=loader_dir, check=True)
-
-    # 1. Clean / create destination directories
+    # 1. Clean / create destination directories. Removing the whole prior tree
+    # is essential when a runtime drops assets (for example the retired Lua layer),
+    # otherwise AppCache would silently keep packaging stale files.
+    if os.path.isdir(output_dir):
+        shutil.rmtree(output_dir)
     os.makedirs(os.path.join(output_dir, "src"), exist_ok=True)
     os.makedirs(os.path.join(output_dir, "offsets"), exist_ok=True)
     os.makedirs(os.path.join(output_dir, "shared"), exist_ok=True)
-    os.makedirs(os.path.join(output_dir, "payloads", "lua"), exist_ok=True)
+    os.makedirs(os.path.join(output_dir, "payloads"), exist_ok=True)
+    os.makedirs(os.path.join(output_dir, "vendor", "wobkot"), exist_ok=True)
 
     # 2. Copy modular engine files from remote-loader
     copy_tree(os.path.join(loader_dir, "src"), os.path.join(output_dir, "src"))
     copy_tree(os.path.join(loader_dir, "offsets"), os.path.join(output_dir, "offsets"))
     copy_tree(os.path.join(loader_dir, "shared"), os.path.join(output_dir, "shared"))
+    copy_file_tree(
+        os.path.join(loader_dir, "vendor", "wobkot"),
+        os.path.join(output_dir, "vendor", "wobkot"),
+        (
+            "LICENSE.txt",
+            "src/misc.js",
+            "src/userland.js",
+            "src/kernel.js",
+            "src/ps5/impl.js",
+            "src/ps5/relapse.js",
+        ),
+    )
+    for relative in RETIRED_RUNTIME_FILES:
+        retired = os.path.join(output_dir, "src", relative)
+        if os.path.isfile(retired):
+            os.unlink(retired)
 
     # 3. Copy shared binaries
     if args.elfldr_bin and os.path.exists(args.elfldr_bin):
+        for name in os.listdir(os.path.join(output_dir, "shared")):
+            if name.startswith("elfldr-ps5") and name.endswith(".elf"):
+                os.unlink(os.path.join(output_dir, "shared", name))
         shutil.copy2(args.elfldr_bin, os.path.join(output_dir, "shared", args.elfldr_name))
 
     if args.payload_bin and os.path.exists(args.payload_bin):
         shutil.copy2(args.payload_bin, os.path.join(output_dir, args.payload_name))
 
     # 4. Copy payloads
+    relapse_src = os.path.join(loader_dir, "payloads", "relapse.js")
+    shutil.copy2(relapse_src, os.path.join(output_dir, "payloads", "relapse.js"))
     poops_src = os.path.join(loader_dir, "payloads", "poops.js")
-    if os.path.exists(poops_src):
-        shutil.copy2(poops_src, os.path.join(output_dir, "payloads", "poops.js"))
-
-    relapse_src = os.path.join(loader_dir, "payloads", "lua", "relapse.lua")
-    if os.path.exists(relapse_src):
-        shutil.copy2(relapse_src, os.path.join(output_dir, "payloads", "lua", "relapse.lua"))
+    shutil.copy2(poops_src, os.path.join(output_dir, "payloads", "poops.js"))
 
     shutil.copy2(os.path.join(repo_root, "payloads", "autoload.js"), os.path.join(output_dir, "payloads", "autoload.js"))
     shutil.copy2(os.path.join(repo_root, "payloads", "autoloader.js"), os.path.join(output_dir, "payloads", "autoloader.js"))

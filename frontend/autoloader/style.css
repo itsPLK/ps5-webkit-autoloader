@@ -168,7 +168,7 @@ body {
   #footer { font-size: 0.65rem; }
 }
 
-/* LuaK1t log section */
+/* Optional grouped payload log section */
 .luak1t-box {
   background: #05102a;
   border: 1px solid #1c3d73;

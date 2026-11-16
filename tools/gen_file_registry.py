@@ -117,9 +117,8 @@ def compress_entry(data):
 def build_manifest(files, version, build_time, app_dir, pointer_path, marker_path):
     """Cache the app, the stable pointer, then the version marker.
 
-    The autoloader is packaged as a single unified standalone page in the app
-    directory. Exploit selection is automatic at runtime based on firmware
-    and network status.
+    The autoloader is packaged as one modular Wobkot application directory.
+    autoloader.js retains the runtime selection boundary.
     """
     lines = [
         "CACHE MANIFEST",

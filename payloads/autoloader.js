@@ -2,8 +2,8 @@
 //
 // 1. Checks if an ELF loader daemon is already listening on loopback port 9021.
 // 2. Checks if the process is already jailbroken (uid 0).
-// 3. If exploit is needed, automatically selects between relapse.lua and poops.js
-//    based on firmware version and network interface status (matching ps5-lua-autoloader).
+// 3. If exploitation is needed, selects Wobkot Relapse or Poops from firmware
+//    and network status, matching the pre-Wobkot automatic policy.
 // 4. Pre-fetches all needed assets before kernel exploit runs.
 // 5. Executes the chosen exploit via api.executePayload().
 // 6. Executes autoload.js to stage and stream the target ELF to elfldr on 9021.
@@ -61,9 +61,7 @@ function selectExploit(api) {
 
   let match = typeof navigator !== "undefined" && navigator.userAgent
     ? /PlayStation 5\/(\d+\.\d+)/.exec(navigator.userAgent) : null;
-  if (!match && fwArg) {
-    match = ["PlayStation 5/" + fwArg, fwArg];
-  }
+  if (!match && fwArg) match = ["PlayStation 5/" + fwArg, fwArg];
 
   if (match) {
     fw = parseFloat(match[1]);
@@ -76,12 +74,14 @@ function selectExploit(api) {
   const is905 = fwExact === "9.05" || Math.abs(fw - 9.05) < 0.001;
   const isOnline = typeof navigator !== "undefined" && !!navigator.onLine;
 
-  if (fw > 12.00 && fw <= 13.60) {
+  if (fw < 7.00 || (fw > 12.00 && fw <= 13.60)) {
     return {
-      file: "payloads/lua/relapse.lua",
-      fallback: "relapse.lua",
-      args: ["compat=remote_lua_loader"],
-      reason: "FW > 12.00 requires Relapse",
+      file: "payloads/relapse.js",
+      fallback: "relapse.js",
+      args: [],
+      reason: fw < 7.00
+        ? "Poops profiles begin at FW 7.00"
+        : "FW > 12.00 requires Relapse",
     };
   }
   if (is905) {
@@ -94,9 +94,9 @@ function selectExploit(api) {
   }
   if (isOnline) {
     return {
-      file: "payloads/lua/relapse.lua",
-      fallback: "relapse.lua",
-      args: ["compat=remote_lua_loader"],
+      file: "payloads/relapse.js",
+      fallback: "relapse.js",
+      args: [],
       reason: "network active",
     };
   }
@@ -104,7 +104,7 @@ function selectExploit(api) {
     file: "payloads/poops.js",
     fallback: "poops.js",
     args: [],
-    reason: "offline mode (FW <= 12.00)",
+    reason: "offline mode (FW 7.00-12.00)",
   };
 }
 
@@ -158,8 +158,9 @@ return async function (api) {
   } catch (e) {}
 
   // Step 5: Run the selected exploit
-  const exploitArgs = choice.args || (choice.file.endsWith(".lua") ? ["compat=remote_lua_loader"] : []);
-  await api.executePayload(exploitCode, exploitArgs);
+  const exploitResult = await api.executePayload(exploitCode, choice.args || []);
+  if (exploitResult && exploitResult.failed)
+    throw new Error(choice.file + " failed; refusing to send the ELF payload");
 
   // Step 6: Transfer the autoloader ELF payload
   await api.log(`[*] Staging and sending ${elfName}...`, "info");

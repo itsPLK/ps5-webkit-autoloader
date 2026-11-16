@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.8.0] - 2026-11-16
+
+* **New Wobkot base and Relapse implementation**: Now uses
+  [ufm42's Wobkot](https://github.com/ufm42/wobkot) base and Relapse
+  implementation as the preferred exploit, with Poops used automatically as
+  the fallback where appropriate.
+* **Expanded firmware support**: Added support for PS5 firmware 6.xx. The
+  supported range is now **6.00–13.60**.
+
+### Dependencies
+* Updated [ps5-webkit-remote-loader](https://github.com/itsPLK/ps5-webkit-remote-loader)
+  to commit `c21446e`.
+
 ## [v0.7.1] - 2026-11-08
 
 * **Fixed Poops stability**: A stability fix for Relapse in v0.7.0 was unintentionally affecting Poops, causing slower runs and more kernel panics.

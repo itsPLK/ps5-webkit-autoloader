@@ -24,8 +24,8 @@ ifndef BUILD_TITLE
 BUILD_TITLE := $(shell $(PYTHON) tools/gen_version.py --title)
 endif
 
-# Modular autoloader page carrying autoloader.js (unified orchestrator),
-# poops.js, relapse.lua, autoload.js, autoload.elf, and elfldr.elf.
+# Modular autoloader page carrying autoloader.js (selection orchestrator),
+# Wobkot Relapse, Poops, autoload.js, autoload.elf, and elfldr.elf.
 # All assets are cached individually via AppCache or served via HTTP.
 ELFLDR_TAG ?= $(shell git -C third_party/ps5-elfldr describe --tags --always 2>/dev/null || echo v0.27-b57d0e9)
 ELFLDR_VIRTUAL := shared/elfldr-ps5-$(ELFLDR_TAG).elf
@@ -55,6 +55,7 @@ print-version:
 	@echo $(BUILD_VERSION)
 
 test:
+	$(PYTHON) tools/test_modular_build.py
 	node tools/test_elfldr_check.js
 	node tools/test_autoload_payload.js
 	node tools/test_installer.js
@@ -76,9 +77,8 @@ $(INSTALLER_LOGO): assets/icon.svg
 payload-deps:
 	./tools/download_deps.sh
 
-# Modular autoloader page directory carrying autoloader.js (orchestrator),
-# poops.js, relapse.lua, autoload.js, and payload ELF. Exploit selection
-# is determined dynamically at runtime based on FW and network status.
+# Modular autoloader page directory carrying autoloader.js first, the selected
+# Poops/Relapse exploit second, and autoload.js/target ELF last.
 page: payload-deps
 	@mkdir -p build/autoloader
 	$(PYTHON) tools/build_modular_page.py \
