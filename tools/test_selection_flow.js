@@ -191,13 +191,7 @@ function testSelectExploit(options) {
     }
   }
 
-  for (const onLine of [true, false]) {
-    const choice = testSelectExploit({ fw: '9.05', onLine });
-    assert(choice.file.endsWith('poops.js'), '9.05 must choose Poops');
-    assert.deepEqual([...choice.args], []);
-  }
-
-  for (const fw of ['7.00', '7.61', '8.60', '9.00', '9.60', '10.01', '11.00',
+  for (const fw of ['7.00', '7.61', '8.60', '9.00', '9.05', '9.60', '10.01', '11.00',
                     '11.40', '12.00']) {
     const online = testSelectExploit({ fw, onLine: true });
     assert(online.file.endsWith('relapse.js'), fw + ' online must choose Relapse');
@@ -207,8 +201,12 @@ function testSelectExploit(options) {
 
   // Desktop query parameters follow the same firmware rules.
   const desk905 = testSelectExploit({ ua: 'Mozilla/5.0', search: '?fw=9.05', onLine: true });
-  assert(desk905.file.endsWith('poops.js'));
+  assert(desk905.file.endsWith('relapse.js'));
   assert.deepEqual([...desk905.args], []);
+  const desk905Offline = testSelectExploit({
+    ua: 'Mozilla/5.0', search: '?fw=9.05', onLine: false,
+  });
+  assert(desk905Offline.file.endsWith('poops.js'));
 
   const desk1300 = testSelectExploit({ ua: 'Mozilla/5.0', search: '?fw=13.00', onLine: false });
   assert(desk1300.file.endsWith('relapse.js'));
@@ -273,6 +271,8 @@ function testSelectExploit(options) {
   for (const selection of [
     { fw: '11.00', onLine: true, exploit: /relapse\.js/ },
     { fw: '11.00', onLine: false, exploit: /poops\.js/ },
+    { fw: '9.05', onLine: true, exploit: /relapse\.js/ },
+    { fw: '9.05', onLine: false, exploit: /poops\.js/ },
   ]) {
     const api = makeMockApi({ elfldrRunning: false, jailbroken: false });
     // Mock global fetch for embedded files

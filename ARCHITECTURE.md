@@ -30,7 +30,6 @@ The autoloader runs `payloads/autoloader.js` first as its selection orchestrator
 3. If exploitation is needed, `selectExploit(api)` applies the automatic policy:
    - **6.00–6.x**: Wobkot Relapse (Poops profiles begin at 7.00)
    - **12.02–13.60**: Wobkot Relapse
-   - **9.05**: Poops
    - **7.00–12.00 with an active network interface**: Wobkot Relapse
    - **7.00–12.00 offline**: Poops
 4. The orchestrator pre-fetches the chosen exploit code, `payloads/autoload.js`,

@@ -53,7 +53,6 @@ async function isJailbroken(api) {
 
 function selectExploit(api) {
   let fw = 0;
-  let fwExact = "";
 
   const params = typeof location !== "undefined" && location.search
     ? new URLSearchParams(location.search) : null;
@@ -65,13 +64,10 @@ function selectExploit(api) {
 
   if (match) {
     fw = parseFloat(match[1]);
-    fwExact = match[1];
   } else if (typeof api.fw === "string" && api.fw !== "unknown") {
     fw = parseFloat(api.fw);
-    fwExact = api.fw;
   }
 
-  const is905 = fwExact === "9.05" || Math.abs(fw - 9.05) < 0.001;
   const isOnline = typeof navigator !== "undefined" && !!navigator.onLine;
 
   if (fw < 7.00 || (fw > 12.00 && fw <= 13.60)) {
@@ -82,14 +78,6 @@ function selectExploit(api) {
       reason: fw < 7.00
         ? "Poops profiles begin at FW 7.00"
         : "FW > 12.00 requires Relapse",
-    };
-  }
-  if (is905) {
-    return {
-      file: "payloads/poops.js",
-      fallback: "poops.js",
-      args: [],
-      reason: "FW 9.05 requires Poops",
     };
   }
   if (isOnline) {

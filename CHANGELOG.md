@@ -10,10 +10,13 @@ All notable changes to this project will be documented in this file.
   the fallback where appropriate.
 * **Expanded firmware support**: Added support for PS5 firmware 6.xx. The
   supported range is now **6.00–13.60**.
+* **Relapse support on 9.05**: Wobkot Relapse is now preferred on firmware
+  9.05 when a network interface is active, with Poops retained as the offline
+  fallback.
 
 ### Dependencies
 * Updated [ps5-webkit-remote-loader](https://github.com/itsPLK/ps5-webkit-remote-loader)
-  to commit `c21446e`.
+  to commit `2c87626`.
 
 ## [v0.7.1] - 2026-11-08
 
