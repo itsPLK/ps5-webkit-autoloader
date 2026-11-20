@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.8.1] - 2026-11-20
+
+### Dependencies
+* Updated Wobkot to [`38ad28e`](https://github.com/ufm42/wobkot/tree/38ad28e)
+  - Added Relapse support for FW 5.00, 5.02, 5.10, and 5.50.
+  - Updated offsets for FW 6.00, 6.02, 13.40, and 13.60.
+
+This expands supported firmware to **5.00–13.60**.
+
 ## [v0.8.0] - 2026-11-20
 
 * **Migrated to Wobkot**: Now uses [ufm42's Wobkot](https://github.com/ufm42/wobkot)

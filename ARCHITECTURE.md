@@ -28,7 +28,7 @@ The autoloader runs `payloads/autoloader.js` first as its selection orchestrator
 2. `isJailbroken(api)` probes if the process already has root privileges (`uid 0`
    via `syscall(24)`). If already jailbroken, it skips the kernel exploit and autoload.
 3. If exploitation is needed, `selectExploit(api)` applies the automatic policy:
-   - **6.00–6.x**: Wobkot Relapse (Poops profiles begin at 7.00)
+   - **5.00–6.x**: Wobkot Relapse (Poops profiles begin at 7.00)
    - **12.02–13.60**: Wobkot Relapse
    - **7.00–12.00 with an active network interface**: Wobkot Relapse
    - **7.00–12.00 offline**: Poops
@@ -45,7 +45,7 @@ The autoloader runs `payloads/autoloader.js` first as its selection orchestrator
 
 The installation and dispatch flow is fully automated:
 
-1. The installer page loads. On all supported firmwares (6.00–13.60), caching
+1. The installer page loads. On all supported firmwares (5.00–13.60), caching
    starts immediately without user intervention or manual exploit pickers.
 2. The server withholds `manifest="/cache.appcache"` only when the requesting
    firmware is unsupported, stopping AppCache before it begins. Supported
@@ -61,7 +61,7 @@ The server's only selection logic is deciding per request whether to include the
 in memory or C variables.
 
 The Wobkot adapter rejects unsupported firmware before running WebKit. The active
-range is 6.00–13.60. Poops' compatibility offsets cover 7.00–13.60; selection
+range is 5.00–13.60. Poops' compatibility offsets cover 7.00–13.60; selection
 uses it only through 12.00. The former Lua translation layer is not packaged.
 
 ## Build
@@ -112,7 +112,7 @@ for offline pages, or the installer ELF for the PC setup host.
 ## Offline installation
 
 The installer serves on `127.0.0.1:18181` only. On all supported firmwares
-(6.00–13.60), caching begins immediately without manual selection prompts. The
+(5.00–13.60), caching begins immediately without manual selection prompts. The
 page displays AppCache download progress and calls `/install` once caching completes
 (`cached`, `noupdate`, or `updateready`). The unified autoloader page (`index.html`)
 is cached. The installer validates the version marker before creating the homescreen

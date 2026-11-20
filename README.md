@@ -3,7 +3,7 @@
 </p>
 <h1 align="center">PS5 WebKit Autoloader</h1>
 &nbsp;
-<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>6.00&ndash;13.60</b>.</p>
+<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>5.00&ndash;13.60</b>.</p>
 
 <p align="center">
     <b>Other Autoloaders:</b><br>
