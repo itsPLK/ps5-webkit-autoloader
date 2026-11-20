@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.8.2] - 2026-11-20
+
+* Fixed FW 5.xx being rejected by the Wobkot adapter before exploitation.
+
+### Dependencies
+* Updated [ps5-webkit-remote-loader](https://github.com/itsPLK/ps5-webkit-remote-loader)
+  to commit [`073718c`](https://github.com/itsPLK/ps5-webkit-remote-loader/tree/073718c) (v0.3.1).
+
 ## [v0.8.1] - 2026-11-20
 
 ### Dependencies
