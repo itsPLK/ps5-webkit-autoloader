@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.8.3] - 2026-11-21
+
+### Dependencies
+* Updated Wobkot to [`8abe4a9`](https://github.com/ufm42/wobkot/tree/8abe4a9)
+  - Updated offsets for FW 5.00, 5.02, 5.10, 5.50, 6.00, 6.02, and 6.50.
+
 ## [v0.8.2] - 2026-11-20
 
 * Fixed FW 5.xx being rejected by the Wobkot adapter before exploitation.
