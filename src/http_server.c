@@ -37,7 +37,7 @@ atomic_int install_completed = 0;
  * visible to the main loop. */
 atomic_int webkit_data_cleared = 0;
 
-/* Wobkot supports PS5 5.00 through 13.60. Read the firmware from the
+/* Wobkot supports PS5 3.00 through 13.60. Read the firmware from the
  * User-Agent, or a ?fw= argument for desktop testing. */
 static int firmware_supported(struct MHD_Connection *conn) {
     const char *ua = MHD_lookup_connection_value(conn, MHD_HEADER_KIND, "User-Agent");
@@ -45,7 +45,7 @@ static int firmware_supported(struct MHD_Connection *conn) {
     const char *fw_arg = MHD_lookup_connection_value(conn, MHD_GET_ARGUMENT_KIND, "fw");
     float fw = ps5 ? strtof(ps5 + 14, NULL) : (fw_arg ? strtof(fw_arg, NULL) : 0);
     if (fw == 0) return 1; /* desktop preview */
-    return fw >= 5.00f && fw <= 13.60f;
+    return fw >= 3.00f && fw <= 13.60f;
 }
 
 static void add_cors_headers(struct MHD_Response *resp) {

@@ -127,13 +127,13 @@ const runInstaller = options => setup('frontend/installer-page/index.html',
   assert.match(bare.nodes.logContainer.textContent, /Caching content/);
 
   // 3. Unsupported firmware refuses outright and signals /exit to the server
-  const unsupported = setup('frontend/installer-page/index.html', { fw: '4.50' });
+  const unsupported = setup('frontend/installer-page/index.html', { fw: '2.50' });
   assert.match(unsupported.nodes.status.textContent, /Unsupported/);
   assert.equal(Object.keys(unsupported.listeners).length, 0, 'unsupported firmware must not start caching');
   assert(unsupported.requests.includes('/exit'), 'unsupported firmware must signal /exit');
 
   // Desktop preview testing via ?fw= parameter:
-  const desktopUnsupported = setup('frontend/installer-page/index.html', { ua: 'Mozilla/5.0', search: '?fw=4.50' });
+  const desktopUnsupported = setup('frontend/installer-page/index.html', { ua: 'Mozilla/5.0', search: '?fw=2.50' });
   assert.match(desktopUnsupported.nodes.status.textContent, /Unsupported/);
   assert.equal(Object.keys(desktopUnsupported.listeners).length, 0);
   assert(desktopUnsupported.requests.includes('/exit'));
@@ -235,7 +235,7 @@ const runInstaller = options => setup('frontend/installer-page/index.html',
     if (incomplete) assert.match(pointer.nodes.status.textContent, /incomplete/);
   }
 
-  const pUnsupported = setup('frontend/pointer/index.html', { fw: '4.50' });
+  const pUnsupported = setup('frontend/pointer/index.html', { fw: '2.50' });
   await flush();
   assert.equal(pUnsupported.target(), undefined);
   assert.match(pUnsupported.nodes.status.textContent, /Unsupported/);
@@ -245,9 +245,9 @@ const runInstaller = options => setup('frontend/installer-page/index.html',
   await flush();
   assert.equal(pDesk.target(), '/app/test-version/index.html?fw=11.00', '?fw=11.00 desktop preserves fw parameter');
 
-  const pDeskUnsupported = setup('frontend/pointer/index.html', { ua: 'Mozilla/5.0', search: '?fw=4.50' });
+  const pDeskUnsupported = setup('frontend/pointer/index.html', { ua: 'Mozilla/5.0', search: '?fw=2.50' });
   await flush();
-  assert.equal(pDeskUnsupported.target(), undefined, '?fw=4.50 desktop must not redirect');
+  assert.equal(pDeskUnsupported.target(), undefined, '?fw=2.50 desktop must not redirect');
   assert.match(pDeskUnsupported.nodes.status.textContent, /Unsupported/);
 
   console.log('Installer checks passed: cache events, marker, automatic caching, errors, repair and pointer.');

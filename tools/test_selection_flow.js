@@ -10,7 +10,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const FW = ['5.00', '5.02', '5.10', '5.50', '6.00', '6.72', '7.00', '7.61', '8.60', '9.00', '9.05', '9.60',
+const FW = ['3.00', '3.10', '3.20', '4.00', '4.02', '4.03', '4.50', '4.51',
+  '5.00', '5.02', '5.10', '5.50', '6.00', '6.72', '7.00', '7.61', '8.60', '9.00', '9.05', '9.60',
   '10.01', '11.00', '11.40', '12.00', '12.02', '12.70', '13.00', '13.60'];
 
 /* ---- installer page: frontend/installer-page/index.html ------------------- */
@@ -133,7 +134,7 @@ function testSelectExploit(options) {
   }
 
   // 2. Unsupported firmware refuses outright and signals /exit to the server.
-  for (const deadFw of ['4.50', '14.00']) {
+  for (const deadFw of ['2.50', '14.00']) {
     const dead = loadPage({ fw: deadFw });
     assert.match(dead.nodes.status.textContent, /Unsupported/);
     assert.equal(Object.keys(dead.listeners).length, 0, deadFw + ': unsupported firmware must not cache');
@@ -163,7 +164,7 @@ function testSelectExploit(options) {
   await flush();
   assert.equal(pDeskFw.target(), '/app/test-version/index.html?fw=9.05');
 
-  for (const badFw of ['4.50', '14.00']) {
+  for (const badFw of ['2.50', '14.00']) {
     const bad = loadPointer({ fw: badFw });
     await flush();
     assert.equal(bad.target(), undefined, badFw + ' must not redirect');
@@ -184,7 +185,8 @@ function testSelectExploit(options) {
     }
   }
 
-  for (const fw of ['5.00', '5.02', '5.10', '5.50', '6.00', '6.72']) {
+  for (const fw of ['3.00', '3.10', '3.20', '4.00', '4.02', '4.03', '4.50', '4.51',
+                    '5.00', '5.02', '5.10', '5.50', '6.00', '6.72']) {
     for (const onLine of [true, false]) {
       const choice = testSelectExploit({ fw, onLine });
       assert(choice.file.endsWith('relapse.js'), fw + ' has no Poops profile');
@@ -341,7 +343,7 @@ function testSelectExploit(options) {
     'the server must not keep a remembered choice');
   for (const present of [
     'static int firmware_supported(struct MHD_Connection *conn) {',
-    'return fw >= 5.00f && fw <= 13.60f;',
+    'return fw >= 3.00f && fw <= 13.60f;',
     'int cache_allowed = firmware_supported(conn);',
     'if (entry_page && !cache_allowed) {',
   ]) {

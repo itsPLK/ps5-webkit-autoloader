@@ -378,7 +378,7 @@
     match = ['PlayStation 5/' + fwArg, fwArg];
   }
   var fw = match ? parseFloat(match[1]) : 0;
-  var hasWobkot = fw >= 5.00 && fw <= 13.60;
+  var hasWobkot = fw >= 3.00 && fw <= 13.60;
   var unsupported = !!match && !hasWobkot;
 
   // offerRepair defaults to true; pass false to report a failure without
@@ -446,7 +446,7 @@
   if (unsupported) {
     status.textContent = 'Unsupported firmware ' + match[1];
     status.className = 'error';
-    detail.textContent = 'Supported: 5.00–13.60 via Wobkot Relapse and Poops.';
+    detail.textContent = 'Supported: 3.00–13.60 via Wobkot Relapse and Poops.';
     progress.hidden = true;
     percent.hidden = true;
     fetch('/exit').catch(function () { });

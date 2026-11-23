@@ -17,7 +17,7 @@
   }
   var fw = match ? parseFloat(match[1]) : 0;
 
-  if (match && (fw < 5.00 || fw > 13.60)) {
+  if (match && (fw < 3.00 || fw > 13.60)) {
     document.getElementById('status').textContent = 'Unsupported firmware ' + match[1] + '.';
     return;
   }

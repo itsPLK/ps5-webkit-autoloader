@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.8.4] - 2026-11-23
+
+### Dependencies
+* Updated Wobkot to [`452046e`](https://github.com/ufm42/wobkot/tree/452046e)
+  - Added Relapse support for FW 3.00, 3.10, 3.20, 4.00, 4.02, 4.03, 4.50, and 4.51.
+
+This expands supported firmware to **3.00–13.60**.
+
 ## [v0.8.3] - 2026-11-21
 
 ### Dependencies
